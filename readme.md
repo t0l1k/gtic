@@ -1,116 +1,48 @@
-# Tic-80 простой прототип на golang ebitenengine
-Вдохновил Tic-80 на написание этой библиотечки, на golang/ebitenengine.
-
 ## Оглавление
 - [Tic-80 простой прототип на golang ebitenengine](#tic-80-простой-прототип-на-golang-ebitenengine)
-  - [Оглавление](#оглавление)
 - [Привет мир пример](#привет-мир-пример)
-- [Runtime](#runtime)
-- [Cartridge](#cartridge)
 - [Drawing](#drawing)
 - [Input](#input)
 - [Sound](#sound)
 - [System](#system)
+
+
+# Tic-80 простой прототип на golang ebitenengine
+Вдохновил Tic-80 на написание этой библиотечки, на ebitenengine/png. Это учебный прототип, обертка над ebiten, api tic80. Нет ограничений как в tic80, потому остался только контракт BOOT/TIC. Еще подглядывал на [pi](https://github.com/elgopher/pi), где на ebiten обернули pico8.
+Рисуется на холст []RGBA, а после показывается через ebiten или png, есть палитра на 16 цветов, но можно показать любой цвет RGBA. Ввод от мыши/клавиатуры. Звуки/музыка еще в разработке. 
+
+Реализовал несколько примеров.
+
+hello  Привет Мир 
+api_test    Несколько демок нажав Enter следующая сцена по кругу(большинство примеров конвертировал из вики tic80)
+Змейка
+Сапер
+
+
+
+
+
 # Привет мир пример
 
 ``` golang
-
 func main() {
-	etic.Load(func() *etic.Cart {
-		cart := etic.NewCart("Simple",320,200)
-		cart.OnBoot = func(t *etic.T) {
-			log.Println("Simple cart booted")
+	gtic.BOOT = func(a *gtic.API) { log.Println("Booted hello example") }
+	gtic.TIC = func(a *gtic.API) {
+		if a.Key(gtic.KeyESC) {
+			a.Exit()
 		}
-		cart.OnTic = func(t *etic.T) {
-			if t.BtnP(ebiten.KeyEscape) {
-				t.Exit()
-			}
-			if t.BtnP(ebiten.KeyEnter) {
-				t.Reset()
-			}
-			t.Cls(colornames.Teal)
-			t.Print("Hello, World!", 0, 0, colornames.Yellow)
+		if a.KeyP(gtic.KeyRETURN) {
+			a.Reset()
 		}
-		return cart
-	}()).Run()
+		a.Cls()
+		a.Print("Hello World!", 10, 10, a.Pal(4), false, 2)
+	}
+	if err := gtic.Load(gtic.WithTitle("Hello")).Run(); err != nil {
+		log.Println(err)
+	}
 }
 ```
 
-# Runtime
-``` golang
-
-type Runtime struct {
-	api  *Console
-	cart Cartridge
-}
-
-func Load(cart Cartridge) *Runtime {
-	game := &Runtime{
-		cart: cart,
-	}
-	w, h := cart.Size().X, cart.Size().Y
-	game.api = loadConsole(float32(w), float32(h))
-	return game
-}
-func (g *Runtime) Update() error {
-	if g.api.quit {
-		return ebiten.Termination
-	}
-	if !g.api.booted {
-		g.cart.BOOT(g.api)
-		g.api.booted = true
-	}
-	g.api.update()
-	g.cart.TIC(g.api)
-	return nil
-}
-func (g *Runtime) Draw(screen *ebiten.Image)      { g.api.draw(screen) }
-func (g *Runtime) Layout(inW, inH int) (int, int) { return int(g.api.Width), int(g.api.Height) }
-func (g *Runtime) Run() error {
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	ebiten.SetWindowSize(int(g.api.Width), int(g.api.Height))
-	ebiten.SetWindowTitle(g.cart.Title())
-	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
-	return ebiten.RunGame(g)
-}
-
-```
-# Cartridge
-
-```golang
-
-type Cartridge interface {
-	Title() string
-	Size() Point[float32]
-	BOOT(*Console)
-	TIC(*Console)
-}
-type Cart struct {
-	title  string
-	size   Point[float32]
-	OnBoot func(*Console)
-	OnTic  func(*Console)
-}
-
-func NewCart(title string, w, h float32) *Cart {
-	return &Cart{title: title,
-		size: Pt(w, h),
-	}
-}
-func (c *Cart) Title() string        { return c.title }
-func (c *Cart) Size() Point[float32] { return c.size }
-func (c *Cart) BOOT(t *Console) {
-	if c.OnBoot != nil {
-		c.OnBoot(t)
-	}
-}
-func (c *Cart) TIC(t *Console) {
-	if c.OnTic != nil {
-		c.OnTic(t)
-	}
-}
-
-```
 
 # Drawing
 - [Circ](#circ) [x]
@@ -131,10 +63,10 @@ func (c *Cart) TIC(t *Console) {
 - [TriB](#trib) [x] 
 
 # Input
-- [Btn](#btn) [x]
+- [Btn](#btn) [ ]
 - [BtnP](#btnp) [x]
-- [Key](#key) [ ]
-- [KeyP](#keyp) [ ]
+- [Key](#key) [x]
+- [KeyP](#keyp) [x]
 - [Mouse](#mouse) [x]
 
 # Sound
@@ -145,20 +77,5 @@ func (c *Cart) TIC(t *Console) {
 - [Exit](#exit) [x]
 - [Reset](#reset) [x]
 - [Time](#time) [x]
-- [Tstamp](#tstamp) [ ]
-- [Trace](#trace) [x] 
-
-Реализовал несколько примеров использования.
-
-simple  Привет Мир 
-demo    Несколько демок нажав Enter следующая сцена по кругу
-rotate  Показ использования спрайтов. 
-7GUIs   Немного гуи пример счетчик/температуры конвертировать/таймер
-Игры 
-    Змейка  тут спрайт 8х8.
-    Увернись от крипов
-    Найди пару
-
-
-
-
+- [Tstamp](#tstamp) [x]
+- [Trace](#trace) [ ] 

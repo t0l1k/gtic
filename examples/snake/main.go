@@ -1,202 +1,199 @@
 package main
 
 import (
-	"etic"
-	"math"
-	"math/rand"
+	"gtic"
+	"gtic/react"
+	"gtic/ui"
+	"image"
+	"log"
+	"math/rand/v2"
 	"slices"
 	"strconv"
-
-	_ "embed"
-
-	"github.com/hajimehoshi/ebiten/v2"
-	"golang.org/x/image/colornames"
 )
 
 var (
-	//go:embed sprites.png
-	spritesPNG    []byte
-	w, h          float32 = 800, 800
-	width, height float32 = 16, 16
-	gridSize              = w / width
+	w0, h0 = 400, 400
+	grid   = 16
+	scale  = min(w0, h0) / grid
+
+	Up    = image.Pt(0, -1)
+	Down  = image.Pt(0, 1)
+	Left  = image.Pt(-1, 0)
+	Right = image.Pt(1, 0)
 )
 
-type Dir int
+func NewGame() *ui.Element {
+	var (
+		game, snake, food         *ui.Element
+		foodSprID, headID, bodyID gtic.SpriteID
+	)
 
-const (
-	Up Dir = iota
-	Down
-	Left
-	Right
-)
+	appleSpriteData := "00000000" + "00050500" + "00225220" + "02332332" + "03333333" + "02333332" + "00232320" + "00000000"
+	headSprData := "00000000" + "00000000" + "06B00B60" + "65555556" + "55555555" + "55555555" + "65555556" + "06555560"
+	bodySprData := "06555560" + "65555556" + "55555555" + "55555555" + "55555555" + "55555555" + "65555556" + "06555560"
 
-type Snake struct {
-	body    []etic.Point[float32]
-	dir     etic.Point[float32]
-	dirName Dir
-	speed   int
-	game    *Game
-}
+	registerSnakeGameSprites := func(a *gtic.API) {
 
-func (s *Snake) Reset(g *Game) {
-	s.game = g
-	s.body = nil
-	s.body = append(s.body, etic.Pt[float32](13, 8), etic.Pt[float32](14, 8), etic.Pt[float32](15, 8))
-	s.dir = etic.Left
-	s.dirName = Left
-	s.speed = 10
-}
-func (s *Snake) change(n Dir, dir etic.Point[float32]) { s.dirName = n; s.dir = dir }
-func (s *Snake) update(t *etic.Console) {
-	switch {
-	case t.BtnP(ebiten.KeyUp) && s.dir.Y == 0:
-		s.change(Up, etic.Up)
-	case t.BtnP(ebiten.KeyArrowDown) && s.dir.Y == 0:
-		s.change(Down, etic.Down)
-	case t.BtnP(ebiten.KeyArrowLeft) && s.dir.X == 0:
-		s.change(Left, etic.Left)
-	case t.BtnP(ebiten.KeyArrowRight) && s.dir.X == 0:
-		s.change(Right, etic.Right)
-	}
-	if t.Frame()%s.speed == 0 {
-		newPos := s.body[0].Add(s.dir)
-		if !newPos.In(etic.Rect(0, 0, width, height)) {
-			s.game.gameOver = true
+		sprData := func(data string) gtic.Surface[gtic.RGBA] {
+			pixels := make([]gtic.RGBA, 0)
+			for i := 0; i < 64; i++ {
+				val, _ := strconv.ParseUint(string(data[i]), 16, 4)
+				colIdx := int(val)
+				pixels = append(pixels, a.Pal(colIdx))
+			}
+			return gtic.Surface[gtic.RGBA]{Data: pixels, Width: 8, Height: 8}
 		}
-		for i := 0; i < len(s.body); i++ {
-			if s.body[i] == newPos {
-				s.game.gameOver = true
+		foodSprID = a.Sprites().Register(gtic.NewSprite("apple.sprite", sprData(appleSpriteData), image.Rect(0, 0, 8, 8)))
+		headID = a.Sprites().Register(gtic.NewSprite("snake.head.sprite", sprData(headSprData), image.Rect(0, 0, 8, 8)))
+		bodyID = a.Sprites().Register(gtic.NewSprite("snake.body.sprite", sprData(bodySprData), image.Rect(0, 0, 8, 8)))
+	}
+
+	setNewFood := func(snakeBody []image.Point) (x, y int) {
+		check := func(x, y int) bool {
+			for _, v := range snakeBody {
+				if v.X == x && v.Y == y {
+					return true
+				}
+			}
+			return false
+		}
+		for {
+			x, y = rand.IntN(grid), rand.IntN(grid)
+			if !check(x, y) {
+				return x, y
 			}
 		}
-		s.body = slices.Insert(s.body, 0, newPos)
-		s.body = s.body[:len(s.body)-1]
 	}
-	if s.isEat(s.game.food.pos) {
-		s.body = append(s.body, s.game.food.pos)
-		s.game.food.Reset(setNewFood(width, height, s.game.snake.body))
-		s.game.score++
-		if len(s.body)%5 == 0 {
-			s.speed--
+
+	drawField := func(t *gtic.API) {
+		for i := 0; i < t.Bounds().Height; i++ {
+			t.Line(0, i*scale, t.Bounds().Width, i*scale, t.Pal(1))
+			t.Line(i*scale, 0, i*scale, t.Bounds().Height, t.Pal(1))
 		}
 	}
-}
-func (s *Snake) draw(t *etic.Console) {
-	for i, v := range s.body {
-		sprite := 3
-		flip := 0.0
-		if i == 0 {
-			switch s.dirName {
-			case Up:
-				sprite = 1
-			case Down:
-				sprite = 1
-				flip = 2
-			case Left:
-				sprite = 2
-				flip = 1
-			case Right:
-				sprite = 2
+
+	food = ui.NewElement("snake.game.food")
+	foodPos := food.RegisterProperty("food.pos", image.Pt(8, 8))
+	food.OnDraw = func(a *gtic.API) {
+		verticalShift := a.Frame() % 10 / 5
+		pos := foodPos.Get().(image.Point)
+		x, y := pos.X*scale, pos.Y*scale+verticalShift
+		a.Spr(foodSprID, x, y, a.Pal(0), scale/8, 0, 0)
+	}
+
+	snake = ui.NewElement("snake.game.snakebody")
+	snakeDefaultPos := []image.Point{image.Pt(13, 8), image.Pt(14, 8), image.Pt(15, 8)}
+	snakeBody := snake.RegisterUncomparableProperty("body", react.NewPropertyWithEqual[any]([]image.Point{}, func(a, b any) bool { return false }))
+	snakeDir := snake.RegisterProperty("dir", Left)
+	snakeSpeed := snake.RegisterProperty("speed", 10)
+	snake.OnInit = func(a *gtic.API) {
+		snakeBody.Set(nil)
+		snakeBody.Set(snakeDefaultPos)
+		snakeDir.Set(Left)
+		snakeSpeed.Set(10)
+	}
+	snake.OnUpdate = func(a *gtic.API) {}
+	snake.OnDraw = func(a *gtic.API) {
+		for i, v := range snakeBody.Get().([]image.Point) {
+			x, y := v.X*scale, v.Y*scale
+			rotate := 0
+			if i == 0 {
+				switch snakeDir.Get().(image.Point) {
+				case Up:
+					rotate = 0
+				case Down:
+					rotate = 2
+				case Left:
+					rotate = 1
+				case Right:
+					rotate = 3
+				}
+				a.Spr(headID, x, y, a.Pal(0), scale/8, 0, rotate)
+			} else {
+				a.Spr(bodyID, x, y, a.Pal(0), scale/8, 0, 0)
 			}
 		}
-		t.Spr(
-			etic.SpriteID(strconv.Itoa(sprite)),
-			v.X*gridSize,
-			v.Y*gridSize,
-			etic.SprOpt{
-				Scale: gridSize / 8,
-				Flip:  etic.Flip(flip),
-			})
 	}
-}
-func (s *Snake) isEat(food etic.Point[float32]) bool { return s.body[0].Eq(food) }
 
-type Food struct{ pos etic.Point[float32] }
+	game = ui.NewElement("snake.game")
+	game.RegisterProperty("game.score", "0")
+	game.RegisterProperty("game.gameover", false)
+	game.Add(food)
+	game.Add(snake)
+	game.OnInit = func(a *gtic.API) {
+		registerSnakeGameSprites(a)
+		game.Property("game.score").Set("0")
+		game.Property("game.gameover").Set(false)
+		log.Println("game snake reset")
+	}
+	game.OnUpdate = func(a *gtic.API) {
+		if game.Property("game.gameover").Get().(bool) {
+			return
+		}
+		dir := snakeDir.Get().(image.Point)
+		if a.KeyP(gtic.KeyLEFT) && dir.X == 0 {
+			snakeDir.Set(Left)
+		}
+		if a.KeyP(gtic.KeyRIGHT) && dir.X == 0 {
+			snakeDir.Set(Right)
+		}
+		if a.KeyP(gtic.KeyUP) && dir.Y == 0 {
+			snakeDir.Set(Up)
+		}
+		if a.KeyP(gtic.KeyDOWN) && dir.Y == 0 {
+			snakeDir.Set(Down)
+		}
 
-func (f *Food) Reset(x, y float32) { f.pos.X = x; f.pos.Y = y }
-func (f *Food) draw(t *etic.Console) {
-	t.Spr(etic.SpriteID(
-		strconv.Itoa(0)),
-		f.pos.X*gridSize,
-		f.pos.Y*gridSize,
-		etic.SprOpt{
-			Scale: gridSize / 8,
-		})
-}
-func setNewFood(w, h float32, snakeBody []etic.Point[float32]) (x, y float32) {
-	x, y = float32(math.Floor(float64(rand.Float32()*w))), float32(math.Floor(float64(rand.Float32()*h)))
-	for _, v := range snakeBody {
-		if v.X == x && v.Y == y {
-			setNewFood(w, h, snakeBody)
+		if a.Frame()%snakeSpeed.Get().(int) == 0 {
+			body := snakeBody.Get().([]image.Point)
+			newPos := body[0].Add(snakeDir.Get().(image.Point))
+			if !newPos.In(image.Rect(0, 0, grid, grid)) {
+				game.Property("game.gameover").Set(true)
+			}
+			for i := 0; i < len(body); i++ {
+				if body[i] == newPos {
+					game.Property("game.gameover").Set(true)
+				}
+			}
+			snakeBody.Set(slices.Insert(snakeBody.Get().([]image.Point), 0, newPos))
+			pos := foodPos.Get().(image.Point)
+			body = snakeBody.Get().([]image.Point)
+			if newPos == pos {
+				game.Property("game.score").Set(strconv.Itoa(len(snakeBody.Get().([]image.Point)) - 3))
+				x, y := setNewFood(body)
+				foodPos.Set(image.Pt(x, y))
+			} else {
+				snakeBody.Set(body[:len(body)-1])
+			}
 		}
 	}
-	return x, y
+	game.OnDraw = func(a *gtic.API) {
+		a.Cls()
+		drawField(a)
+		str := "Score: " + game.Property("game.score").Get().(string)
+		if game.Property("game.gameover").Get().(bool) {
+			str += "\nGame Over!!!\nPress Enter to play again."
+		}
+		a.Print(str, 0, 0, a.Pal(3), false, scale/10)
+	}
+	return game
 }
 
-type Field struct{}
-
-func (f *Field) draw(t *etic.Console) {
-	var i float32
-	for i = 0; i < t.Height; i++ {
-		t.Line(0, i*gridSize, t.Width, i*gridSize, colornames.Darkgreen)
-		t.Line(i*gridSize, 0, i*gridSize, t.Height, colornames.Darkgreen)
-	}
-}
-
-type Game struct {
-	score           int
-	field           Field
-	food            Food
-	snake           Snake
-	Ready, gameOver bool
-}
-
-func NewGame() *Game { return &Game{} }
-func (g *Game) Reset(t *etic.Console) {
-	g.gameOver = false
-	g.score = 0
-	g.snake.Reset(g)
-	g.food.Reset(8, 8)
-}
-func (g *Game) update(t *etic.Console) {
-	if !g.Ready {
-		g.Reset(t)
-		g.Ready = true
-	}
-	if g.gameOver {
-		return
-	}
-	g.snake.update(t)
-}
-func (g *Game) draw(t *etic.Console) {
-	t.Cls(colornames.Darkgray)
-	g.field.draw(t)
-	g.food.draw(t)
-	g.snake.draw(t)
-	scale := gridSize / float32(t.Face(etic.FontSystem).Size)
-	t.Print("Score:"+strconv.Itoa(g.score), 1, 1, colornames.Aqua, scale)
-	t.Print("Speed:"+strconv.Itoa(g.snake.speed), 1, gridSize, colornames.Aqua, scale)
-	if g.gameOver {
-		t.Print("Game Over!!!\nPress Enter to play again.", 1, gridSize*2, colornames.Red, scale)
-	}
-}
-func StartGame(title string) *etic.Cart {
-	cart := etic.NewCart(title, w, h)
+func main() {
 	game := NewGame()
-	cart.OnBoot = func(t *etic.Console) {
-		game.Ready = false
-		t.LoadSpriteSheet(etic.ApplyColorKey(etic.LoadImage(spritesPNG), colornames.Black), 8, 8)
-	}
-	cart.OnTic = func(t *etic.Console) {
-		if t.BtnP(ebiten.KeyEscape) {
-			t.Exit()
+	gtic.BOOT = func(a *gtic.API) { game.Init(a) }
+	gtic.TIC = func(a *gtic.API) {
+		switch {
+		case a.KeyP(gtic.KeyESC):
+			a.Exit()
+		case a.KeyP(gtic.KeyRETURN):
+			a.Reset()
 		}
-		if t.BtnP(ebiten.KeyEnter) {
-			t.Reset()
-		}
-		game.update(t)
-		game.draw(t)
+		game.Update(a)
+		game.Draw(a)
 	}
-	return cart
-}
 
-func main() { etic.Load(StartGame("Snake")).Run() }
+	if err := gtic.Load(gtic.WithTitle("Snake Game"), gtic.WithMode(w0, h0)).Run(); err != nil {
+		log.Println(err)
+	}
+}
