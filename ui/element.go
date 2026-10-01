@@ -3,11 +3,32 @@ package ui
 import (
 	"gtic"
 	"gtic/react"
+	"image"
 	"slices"
 )
 
 type PropName string
 type ElementID string
+
+type ElementState int
+
+const (
+	ElementNormal ElementState = iota
+	ElementHover
+	ElementPressed
+	ElementSelected
+	ElementDisabled
+)
+
+func (s ElementState) String() string {
+	return []string{"Normal", "Hover", "Pressed", "Selected", "Disabled"}[s]
+}
+func (s ElementState) IsNormal() bool   { return s == ElementNormal }
+func (s ElementState) IsHover() bool    { return s == ElementHover }
+func (s ElementState) IsPressed() bool  { return s == ElementPressed }
+func (s ElementState) IsSelected() bool { return s == ElementSelected }
+func (s ElementState) IsDisabled() bool { return s == ElementDisabled }
+
 type IElement interface {
 	Init(*gtic.API)
 	Update(*gtic.API)
@@ -20,13 +41,25 @@ type Element struct {
 	OnUpdate   func(*gtic.API)
 	OnDraw     func(*gtic.API)
 	children   []IElement
-	ready      bool
 	properties map[PropName]*react.Property[any]
 }
 
 func NewElement(id ElementID) *Element {
 	e := &Element{}
 	e.RegisterProperty("ID", id)
+	e.RegisterProperty("ready", false)
+	e.RegisterProperty("state", ElementNormal)
+	e.RegisterProperty("hidden", false)
+	layout := e.RegisterProperty("layout", AbsoluteLayout{})
+	rect := e.RegisterProperty("rect", image.Rectangle{})
+	rect.OnChange.Connect(func(a any) {
+		r := a.(image.Rectangle)
+		l := layout.Get().(Layout)
+		if l != nil {
+			l.Apply(r, e.children)
+		}
+	})
+	layout.OnChange.Connect(func(a any) { rect.Set(rect.Get()) })
 	return e
 }
 func (e *Element) Children() []IElement {
@@ -51,7 +84,7 @@ func (e *Element) Init(t *gtic.API) {
 	if e.OnInit != nil {
 		e.OnInit(t)
 	}
-	e.ready = true
+	e.Property("ready").Set(true)
 	for _, v := range e.Children() {
 		v.Init(t)
 	}

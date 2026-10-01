@@ -116,18 +116,27 @@ func NewGame() *ui.Element {
 	}
 
 	game = ui.NewElement("snake.game")
-	game.RegisterProperty("game.score", "0")
-	game.RegisterProperty("game.gameover", false)
+	gameScore := game.RegisterProperty("game.score", "0")
+	gameOver := game.RegisterProperty("game.gameover", false)
+	scoreText := "Score: 0"
+	gameScore.OnChange.Connect(func(value any) {
+		scoreText = "Score: " + value.(string)
+	})
+	gameOver.OnChange.Connect(func(value any) {
+		if value.(bool) {
+			log.Println("snake game over")
+		}
+	})
 	game.Add(food)
 	game.Add(snake)
 	game.OnInit = func(a *gtic.API) {
 		registerSnakeGameSprites(a)
-		game.Property("game.score").Set("0")
-		game.Property("game.gameover").Set(false)
+		gameScore.Set("0")
+		gameOver.Set(false)
 		log.Println("game snake reset")
 	}
 	game.OnUpdate = func(a *gtic.API) {
-		if game.Property("game.gameover").Get().(bool) {
+		if gameOver.Get().(bool) {
 			return
 		}
 		dir := snakeDir.Get().(image.Point)
@@ -148,18 +157,18 @@ func NewGame() *ui.Element {
 			body := snakeBody.Get().([]image.Point)
 			newPos := body[0].Add(snakeDir.Get().(image.Point))
 			if !newPos.In(image.Rect(0, 0, grid, grid)) {
-				game.Property("game.gameover").Set(true)
+				gameOver.Set(true)
 			}
 			for i := 0; i < len(body); i++ {
 				if body[i] == newPos {
-					game.Property("game.gameover").Set(true)
+					gameOver.Set(true)
 				}
 			}
 			snakeBody.Set(slices.Insert(snakeBody.Get().([]image.Point), 0, newPos))
 			pos := foodPos.Get().(image.Point)
 			body = snakeBody.Get().([]image.Point)
 			if newPos == pos {
-				game.Property("game.score").Set(strconv.Itoa(len(snakeBody.Get().([]image.Point)) - 3))
+				gameScore.Set(strconv.Itoa(len(snakeBody.Get().([]image.Point)) - 3))
 				x, y := setNewFood(body)
 				foodPos.Set(image.Pt(x, y))
 			} else {
@@ -170,8 +179,8 @@ func NewGame() *ui.Element {
 	game.OnDraw = func(a *gtic.API) {
 		a.Cls()
 		drawField(a)
-		str := "Score: " + game.Property("game.score").Get().(string)
-		if game.Property("game.gameover").Get().(bool) {
+		str := scoreText
+		if gameOver.Get().(bool) {
 			str += "\nGame Over!!!\nPress Enter to play again."
 		}
 		a.Print(str, 0, 0, a.Pal(3), false, scale/10)
