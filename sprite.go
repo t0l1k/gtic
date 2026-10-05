@@ -56,7 +56,7 @@ func (sb *spriteBank) Get(id SpriteID) (*Sprite, bool) {
 }
 
 // Spr(id SpriteID, x, y int, colorkey RGBA, scale, flip, rotate int)
-func (c *API) Spr(id SpriteID, x, y int, args ...interface{}) {
+func (a *API) Spr(id SpriteID, x, y int, args ...interface{}) {
 	colorKey := Transparent
 	scale := 1
 	flip := 0
@@ -89,7 +89,7 @@ func (c *API) Spr(id SpriteID, x, y int, args ...interface{}) {
 	flip = nextInt(flip)
 	rotate = nextInt(rotate)
 
-	spr, exists := c.Sprites().Get(id)
+	spr, exists := a.Sprites().Get(id)
 	if !exists || scale <= 0 {
 		return
 	}
@@ -114,7 +114,7 @@ func (c *API) Spr(id SpriteID, x, y int, args ...interface{}) {
 				for dx := 0; dx < scale; dx++ {
 					px := x + (sx * scale) + dx
 					py := y + (sy * scale) + dy
-					c.Pix(px, py, col)
+					a.Pix(px, py, col)
 				}
 			}
 		}

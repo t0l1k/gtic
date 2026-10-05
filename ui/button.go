@@ -26,7 +26,7 @@ func NewButton(id ElementID, txt string, fn react.SlotFn[*Element]) *Element {
 		state.OnChange.Connect(func(v any) {
 			s := v.(ElementState)
 			switch s {
-			case ElementNormal:
+			case ElementIdle:
 				bg = normalCol
 			case ElementHover:
 				bg = hoverCol
@@ -47,8 +47,8 @@ func NewButton(id ElementID, txt string, fn react.SlotFn[*Element]) *Element {
 		x, y, l, m, r, _, _ := a.Mouse()
 		inside := image.Pt(x, y).In(rect.Get().(image.Rectangle))
 		switch {
-		case !inside && !state.Get().(ElementState).IsNormal():
-			state.Set(ElementNormal)
+		case !inside && !state.Get().(ElementState).IsIdle():
+			state.Set(ElementIdle)
 		case inside && (l || m || r) && !state.Get().(ElementState).IsPressed():
 			state.Set(ElementPressed)
 		case inside && !(l || m || r) && !(state.Get().(ElementState).IsHover() || state.Get().(ElementState).IsPressed()):

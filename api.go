@@ -15,6 +15,7 @@ type API struct {
 
 	pallete         map[int]RGBA
 	btnHoldCounters map[int]int
+	keyHoldCounters map[Key]int
 
 	showTitleFpsTps bool
 }
@@ -26,12 +27,13 @@ func newAPI(config Config) *API {
 		started:         time.Now(),
 		sprites:         newSpriteBank(),
 		btnHoldCounters: make(map[int]int),
+		keyHoldCounters: make(map[Key]int),
 		showTitleFpsTps: true,
 	}
 	a.ResetPal()
 	return a
 }
 
-func (c *API) Config() Config       { return c.config }
+func (a *API) Config() Config       { return a.config }
 func (a *API) Bounds() Mode         { return Mode{a.vram.width, a.vram.height} }
 func (a *API) Sprites() *spriteBank { return a.sprites }

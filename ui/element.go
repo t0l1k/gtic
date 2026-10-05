@@ -13,7 +13,7 @@ type ElementID string
 type ElementState int
 
 const (
-	ElementNormal ElementState = iota
+	ElementIdle ElementState = iota
 	ElementHover
 	ElementPressed
 	ElementSelected
@@ -23,7 +23,7 @@ const (
 func (s ElementState) String() string {
 	return []string{"Normal", "Hover", "Pressed", "Selected", "Disabled"}[s]
 }
-func (s ElementState) IsNormal() bool   { return s == ElementNormal }
+func (s ElementState) IsIdle() bool     { return s == ElementIdle }
 func (s ElementState) IsHover() bool    { return s == ElementHover }
 func (s ElementState) IsPressed() bool  { return s == ElementPressed }
 func (s ElementState) IsSelected() bool { return s == ElementSelected }
@@ -48,7 +48,7 @@ func NewElement(id ElementID) *Element {
 	e := &Element{}
 	e.RegisterProperty("ID", id)
 	e.RegisterProperty("ready", false)
-	e.RegisterProperty("state", ElementNormal)
+	e.RegisterProperty("state", ElementIdle)
 	e.RegisterProperty("hidden", false)
 	layout := e.RegisterProperty("layout", AbsoluteLayout{})
 	rect := e.RegisterProperty("rect", image.Rectangle{})

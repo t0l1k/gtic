@@ -6,8 +6,9 @@ import (
 )
 
 type SceneTree struct {
-	scenes       map[ElementID]IElement
-	currentScene ElementID
+	scenes              map[ElementID]IElement
+	currentScene        ElementID
+	focusedId, activeId ElementID
 }
 
 func NewSceneTree() *SceneTree { return &SceneTree{} }
@@ -30,4 +31,17 @@ func (s *SceneTree) Change(a *gtic.API, id ElementID) {
 func (s *SceneTree) TIC(a *gtic.API) {
 	s.scenes[s.currentScene].Update(a)
 	s.scenes[s.currentScene].Draw(a)
+}
+
+func (t *SceneTree) Focus(id ElementID) {
+	if t.focusedId == id {
+		return
+	}
+	t.focusedId = id
+}
+func (t *SceneTree) Blur() {
+	if t.focusedId == "" {
+		return
+	}
+	t.focusedId = ""
 }

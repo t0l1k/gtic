@@ -2,19 +2,19 @@ package ui
 
 import (
 	"gtic"
+	"gtic/react"
 	"time"
 )
 
 type TimerState int
 
 const (
-	TimerStop TimerState = iota
-	TimerRun
+	TimerStart TimerState = iota
+	TimerStop
 	TimerDone
 )
 
-// Timer id ElementID, waitTime time.Duration, autoStart, oneShot bool
-func NewTimer(id ElementID, waitTime time.Duration, autoStart, oneShot bool) *Element {
+func NewTimer(id ElementID, waitTime time.Duration, autoStart, oneShot bool, fn react.SlotFn[string]) *Element {
 	var (
 		timeLeft time.Duration
 		running  bool
@@ -24,17 +24,16 @@ func NewTimer(id ElementID, waitTime time.Duration, autoStart, oneShot bool) *El
 		timeLeft = waitTime
 	}
 	e := NewElement(id)
-	done := e.RegisterProperty("done", false)
-	state := e.RegisterProperty("state", TimerStop)
+	state := e.RegisterUncomparableProperty("state", react.NewPropertyWithEqual[any](TimerStop, func(a, b any) bool { return false }))
 	state.OnChange.Connect(func(a any) {
 		s := a.(TimerState)
 		switch s {
+		case TimerStart:
+			start()
 		case TimerStop:
 			running = false
-		case TimerRun:
-			start()
 		case TimerDone:
-			done.Set(true)
+			fn("done")
 		}
 	})
 	e.OnInit = func(a *gtic.API) {

@@ -25,6 +25,13 @@ func (c RGBA) String() string {
 	r, g, b, a := c.ToBytes()
 	return fmt.Sprintf("RGBA:%v,%v,%v,%v", r, g, b, a)
 }
+func (c RGBA) RGBA() (r, g, b, a uint32) {
+	r = uint32(c >> 24)
+	g = uint32(c >> 16)
+	b = uint32(c >> 8)
+	a = uint32(c)
+	return
+}
 
 type screen struct {
 	width, height int

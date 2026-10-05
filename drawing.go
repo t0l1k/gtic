@@ -141,10 +141,10 @@ func (a *API) ElliB(x, y, radiusX, radiusY int, colour RGBA) {
 }
 
 // Контурный треугольник — три линии (алгоритм Брезенхэма)
-func (c *API) TriB(x1, y1, x2, y2, x3, y3 int, col RGBA) {
-	c.Line(x1, y1, x2, y2, col)
-	c.Line(x2, y2, x3, y3, col)
-	c.Line(x3, y3, x1, y1, col)
+func (a *API) TriB(x1, y1, x2, y2, x3, y3 int, col RGBA) {
+	a.Line(x1, y1, x2, y2, col)
+	a.Line(x2, y2, x3, y3, col)
+	a.Line(x3, y3, x1, y1, col)
 }
 
 // Элегантный и быстрый CPU-растеризатор треугольника

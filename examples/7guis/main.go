@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"gtic"
 	"gtic/react"
 	"gtic/ui"
@@ -21,8 +22,48 @@ var (
 	QuitApp      = "X"
 )
 
-func NewCounter(id ui.ElementID, fn react.SlotFn[*ui.Element]) *ui.Element {
+func toF(c float64) float64 { return c*(9.0/5.0) + 32.0 }
+func toC(f float64) float64 { return (f - 32.0) * (5.0 / 9.0) }
+
+func NewTemeratureConv(id ui.ElementID, fn react.SlotFn[*ui.Element], sc *ui.SceneTree) *ui.Element {
+	tempConvCelsius := ui.NewInputLine(sc, "tempconv.c", "Celsius", func(il *ui.Element) {})
+	tempConvFahrenheit := ui.NewInputLine(sc, "tempconv.f", "Fahrenheit", func(il *ui.Element) {})
+
+	tempConvCelsius.Property("text").OnChange.Connect(func(a any) {
+		s := a.(string)
+		v, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return
+		}
+		result := toF(v)
+		tempConvFahrenheit.Property("placeholder").Set(fmt.Sprintf("%.1f", result))
+		tempConvFahrenheit.Property("text").Set("")
+	})
+	tempConvFahrenheit.Property("text").OnChange.Connect(func(a any) {
+		s := a.(string)
+		v, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return
+		}
+		result := toC(v)
+		tempConvCelsius.Property("placeholder").Set(fmt.Sprintf("%.1f", result))
+		tempConvCelsius.Property("text").Set("")
+	})
+
+	cont := ui.NewElement("scene.temperature.converter.container")
+	cont.Property("layout").Set(ui.NewHorizontalBoxLayout(0.05))
+	cont.Add(tempConvCelsius)
+	cont.Add(ui.NewLabel("scene.temperature.converter.label", "="))
+	cont.Add(tempConvFahrenheit)
 	s := ui.NewElement(id)
+	s.Property("layout").Set(ui.NewVerticalFlexLayout([]float32{0.1, 0.1, 0.8}, 0.05))
+	s.Add(ui.TopBar("scene.temperature.converter.topbar", TempConv, QuitDemo, fn))
+	s.Add(ui.NewLabel("scene.temperature.converter.helper", "Bidirectional data flow with user-provided text input."))
+	s.Add(cont)
+	return s
+}
+
+func NewCounter(id ui.ElementID, fn react.SlotFn[*ui.Element]) *ui.Element {
 	counter := react.NewProperty(0)
 	lblCount := ui.NewLabel("scene.counter.label.count", "0")
 	lblCount.Property("scale").Set(3)
@@ -39,15 +80,16 @@ func NewCounter(id ui.ElementID, fn react.SlotFn[*ui.Element]) *ui.Element {
 		lblCount.Property("text").Set(strconv.Itoa(i))
 	})
 
-	s.Property("layout").Set(ui.NewVerticalFlexLayout([]float32{0.1, 0.7, 0.2}, 0.05))
-	s.Add(ui.TopBar("scene.counter.topbar", Counter, QuitDemo, fn))
-	s.Add(lblCount)
-
 	contBtns := ui.NewElement("scene.counter.buttons.container")
 	contBtns.Property("layout").Set(ui.NewHorizontalBoxLayout(0.05))
 	contBtns.Add(btnInc)
 	contBtns.Add(btnDec)
 	contBtns.Add(btnReset)
+
+	s := ui.NewElement(id)
+	s.Property("layout").Set(ui.NewVerticalFlexLayout([]float32{0.1, 0.7, 0.2}, 0.05))
+	s.Add(ui.TopBar("scene.counter.topbar", Counter, QuitDemo, fn))
+	s.Add(lblCount)
 	s.Add(contBtns)
 	return s
 }
@@ -72,17 +114,27 @@ func main() {
 				SC.Change(a, "scene.main")
 			}
 		})
+		tempconv := NewTemeratureConv("scene.temp.conv", func(e *ui.Element) {
+			txt := e.Property("text")
+			switch txt.Get().(string) {
+			case QuitDemo:
+				SC.Change(a, "scene.main")
+			}
+		}, SC)
 		main := sceneMain(func(e *ui.Element) {
 			txt := e.Property("text")
 			switch txt.Get().(string) {
 			case Counter:
 				SC.Change(a, counter.Property("ID").Get().(ui.ElementID))
+			case TempConv:
+				SC.Change(a, tempconv.Property("ID").Get().(ui.ElementID))
 			case QuitApp:
 				a.Exit()
 			}
 		})
 		SC.AddScene(main)
 		SC.AddScene(counter)
+		SC.AddScene(tempconv)
 		SC.Change(a, main.Property("ID").Get().(ui.ElementID))
 	}
 	gtic.TIC = func(a *gtic.API) {

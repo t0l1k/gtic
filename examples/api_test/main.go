@@ -36,6 +36,75 @@ func LoadSprite(a *gtic.API) (ids []gtic.SpriteID) {
 	return ids
 }
 
+func CartKeyP(fn func()) *ui.Element {
+	const (
+		CharTableLower = "!abcdefghijklmnopqrstuvwxyz0123456789-=[]\\;'`,./ "
+		CharTableUpper = "!ABCDEFGHIJKLMNOPQRSTUVWXYZ)!@#$%^&*(_+{}|:\"~<>? "
+	)
+	e := ui.NewElement("cart.keyp.test")
+	var (
+		input   string
+		cursor  int
+		x, y, w int = 10, 60, 20
+		scroll  int
+	)
+	getCh := func(a *gtic.API) string {
+		for i := 0; i < len(CharTableLower); i++ {
+			if a.Key(gtic.KeySHIFT) && a.KeyP(gtic.Key(i)) {
+				return string(CharTableUpper[i])
+			} else if a.KeyP(gtic.Key(i)) {
+				return string(CharTableLower[i])
+			}
+		}
+		return ""
+	}
+	e.OnInit = func(a *gtic.API) { cursor = len(input) }
+	e.OnUpdate = func(a *gtic.API) {
+		if a.KeyP(gtic.KeyRETURN) {
+			fn()
+		}
+		ch := getCh(a)
+		if ch != "" {
+			input = input[:cursor] + ch + input[cursor:]
+			cursor++
+		}
+		switch {
+		case a.KeyP(gtic.KeyLEFT):
+			cursor = max(0, cursor-1)
+		case a.KeyP(gtic.KeyRIGHT):
+			cursor = min(len(input), cursor+1)
+		case a.KeyP(gtic.KeyHOME):
+			cursor = 0
+		case a.KeyP(gtic.KeyEND):
+			cursor = len(input)
+		case a.KeyP(gtic.KeyBACKSPACE, 20, 3):
+			if cursor > 0 && len(input) > 0 {
+				input = input[:cursor-1] + input[cursor:]
+				cursor--
+			}
+		case a.KeyP(gtic.KeyDELETE):
+			if cursor >= 0 && cursor < len(input) {
+				input = input[:cursor] + input[cursor+1:]
+			}
+		}
+		if cursor < scroll+1 {
+			scroll = cursor - 1
+		} else if cursor > scroll+w {
+			scroll = cursor - w
+		}
+	}
+	e.OnDraw = func(a *gtic.API) {
+		a.Cls(gtic.NewColor(colornames.Teal))
+		a.Print("type text", x, y-12, a.Pal(12))
+		a.Rect(x-2, y-2, w*6+4, 12, a.Pal(12))
+		a.Print(input[min(scroll+1, len(input)):min(scroll+w, len(input))], x, y, a.Pal(15))
+		if a.Time()%800 < 500 {
+			a.Rect(x+(cursor-1-scroll)*6, y+7, 5, 1, 6)
+		}
+	}
+	return e
+}
+
 func CartClipTest(fn func()) *ui.Element {
 	var (
 		x, y int  = 96, 24
@@ -793,6 +862,7 @@ func main() {
 		ellipsTest     *ui.Element
 		triTest        *ui.Element
 		clipTest       *ui.Element
+		keyPTest       *ui.Element
 	)
 
 	gtic.BOOT = func(a *gtic.API) {
@@ -811,7 +881,8 @@ func main() {
 		cartOne = CartOne(func() { ST.Change(a, ellipsTest.Property("ID").Get().(ui.ElementID)) })
 		ellipsTest = CartEllipsTest(func() { ST.Change(a, triTest.Property("ID").Get().(ui.ElementID)) })
 		triTest = CartTriTest(func() { ST.Change(a, clipTest.Property("ID").Get().(ui.ElementID)) })
-		clipTest = CartClipTest(func() { ST.Change(a, hello.Property("ID").Get().(ui.ElementID)) })
+		clipTest = CartClipTest(func() { ST.Change(a, keyPTest.Property("ID").Get().(ui.ElementID)) })
+		keyPTest = CartKeyP(func() { ST.Change(a, hello.Property("ID").Get().(ui.ElementID)) })
 		ST.AddScene(hello)
 		ST.AddScene(mouseTest)
 		ST.AddScene(printTest)
@@ -827,8 +898,9 @@ func main() {
 		ST.AddScene(ellipsTest)
 		ST.AddScene(triTest)
 		ST.AddScene(clipTest)
+		ST.AddScene(keyPTest)
 
-		ST.Change(a, hello.Property("ID").Get().(ui.ElementID))
+		ST.Change(a, clipTest.Property("ID").Get().(ui.ElementID))
 	}
 	gtic.TIC = func(a *gtic.API) {
 		if a.KeyP(gtic.KeyESC) {

@@ -2,12 +2,13 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"gtic"
 	"gtic/examples/games/minesweeper/game"
 	"gtic/examples/games/minesweeper/res"
+	"gtic/react"
 	"gtic/ui"
 	"image"
-	"log"
 	"time"
 )
 
@@ -17,8 +18,29 @@ func NewMinesGame() *ui.Element {
 		ox, oy                    int
 		leftPressed, rightPressed bool
 		btnReset, gameStopwatch   *ui.Element
+		faceSprite                *react.Var[int]
 	)
 	minesGame := game.NewMines(9, 9, 10)
+	minesGame.State.OnChange.Connect(func(gs game.GameState) {
+		swState := gameStopwatch.Property("state")
+		switch gs {
+		case game.GameStart:
+			swState.Set(ui.StopwatchReset)
+			faceSprite.Set(res.SprFaceIdle)
+		case game.GamePlay:
+			swState.Set(ui.StopwatchStart)
+			faceSprite.Set(res.SprFaceIdle)
+		case game.GameWin, game.GameGameOver:
+			swState.Set(ui.StopwatchStop)
+			switch gs {
+			case game.GameWin:
+				faceSprite.Set(res.SprFaceWin)
+			case game.GameGameOver:
+				faceSprite.Set(res.SprFaceDead)
+			}
+		}
+	})
+
 	gameStopwatch = ui.NewStopwatch("game.stopwatch")
 	minesLeftIcon := func() *ui.Element {
 		e := ui.NewElement("topbar.minesleft.icon")
@@ -54,19 +76,7 @@ func NewMinesGame() *ui.Element {
 	timerIcon := func() *ui.Element {
 		e := ui.NewElement("topbar.timer.icon")
 		rect := e.Property("rect")
-		e.OnInit = func(a *gtic.API) {
-			minesGame.State.OnChange.Connect(func(gs game.GameState) {
-				swState := gameStopwatch.Property("state")
-				switch gs {
-				case game.GameStart:
-					swState.Set(ui.StopwatchReset)
-				case game.GamePlay:
-					swState.Set(ui.StopwatchStart)
-				case game.GameWin, game.GameGameOver:
-					swState.Set(ui.StopwatchStop)
-				}
-			})
-		}
+		e.OnInit = func(a *gtic.API) {}
 		e.OnUpdate = func(a *gtic.API) {}
 		e.OnDraw = func(a *gtic.API) {
 			x, y, w, h := gtic.RectXYWH(rect.Get().(image.Rectangle))
@@ -95,22 +105,28 @@ func NewMinesGame() *ui.Element {
 
 	faceIcon := func() *ui.Element {
 		e := ui.NewElement("topbar.face.icon")
-		faceSprite := e.RegisterProperty("face", res.SprFaceIdle)
+		faceSprite = react.NewVar(res.SprFaceIdle)
+		timerOuch := ui.NewTimer("timer.ouch", 250*time.Millisecond, false, true, func(s string) {
+			if s != "done" || minesGame.State.Get() != game.GamePlay {
+				return
+			}
+			faceSprite.Set(res.SprFaceIdle)
+		})
 		rect := e.Property("rect")
+		var pressed bool
 		e.OnInit = func(a *gtic.API) {}
 		e.OnUpdate = func(a *gtic.API) {
-			switch minesGame.State.Get() {
-			case game.GameStart:
-				faceSprite.Set(res.SprFaceIdle)
-			case game.GamePlay:
-				faceSprite.Set(res.SprFaceIdle)
-			case game.GameWin:
-				faceSprite.Set(res.SprFaceWin)
-			case game.GameGameOver:
-				faceSprite.Set(res.SprFaceDead)
+			if minesGame.State.Get() != game.GamePlay {
+				return
 			}
-			if leftPressed || rightPressed {
+			if leftPressed && !pressed {
 				faceSprite.Set(res.SprFacePlay)
+				pressed = true
+			}
+			if pressed && !leftPressed {
+				timerOuch.Property("state").Set(ui.TimerStart)
+				faceSprite.Set(res.SprFaceOuch)
+				pressed = false
 			}
 		}
 		e.OnDraw = func(a *gtic.API) {
@@ -118,8 +134,9 @@ func NewMinesGame() *ui.Element {
 			a.Rect(x, y, w, h, a.Pal(11))
 			x += 1
 			y += 1
-			a.Spr(sprIds[faceSprite.Get().(int)], x, y)
+			a.Spr(sprIds[faceSprite.Get()], x, y)
 		}
+		e.Add(timerOuch)
 		return e
 	}()
 
@@ -207,10 +224,10 @@ func NewMinesGame() *ui.Element {
 
 	mainScene := ui.NewElement("minesweeper.game")
 	mainScene.Add(btnReset)
-	mainScene.Add(cursor)
 	mainScene.Add(topBar)
 	mainScene.Add(gameField)
 	mainScene.Add(gameStopwatch)
+	mainScene.Add(cursor)
 
 	mainScene.OnInit = func(a *gtic.API) {
 		sprIds = res.RegisterSprites(a)
@@ -281,6 +298,6 @@ func main() {
 		game.Draw(a)
 	}
 	if err := gtic.Load(gtic.WithTitle("Minesweeper"), gtic.WithMode(320, 200)).Run(); err != nil {
-		log.Println(err)
+		fmt.Println(err)
 	}
 }

@@ -103,6 +103,8 @@ const (
 	KeyNUMPADDIVIDE
 	KeyNUMPADENTER
 	KeyNUMPADPERIOD
+	KeyMeta
+	KeyMax
 )
 
 type MouseButton int
@@ -124,9 +126,8 @@ func newMouseData(x, y int, wx, wy float64, buttons map[MouseButton]bool) mouse 
 }
 
 type Input struct {
-	mouse       mouse
-	keys        map[Key]bool
-	justPressed map[Key]bool
+	mouse mouse
+	keys  map[Key]bool
 }
 
 func (a *API) Mouse() (x, y int, left, middle, right bool, scrollX, scrollY float64) {
@@ -149,7 +150,27 @@ func (a *API) Key(key ...Key) bool {
 	return a.input.keys[key[0]]
 }
 
-func (a *API) KeyP(key Key) bool { return a.input.justPressed[key] }
+func (a *API) KeyP(key Key, param ...int) bool {
+	hold, period := 30, 6
+	if len(param) > 0 {
+		hold, period = param[0], param[1]
+	}
+
+	pressed := a.input.keys[key]
+	if !pressed {
+		a.keyHoldCounters[key] = 0
+		return false
+	}
+	ticks := a.keyHoldCounters[key]
+	a.keyHoldCounters[key]++
+	if ticks == 0 {
+		return true
+	}
+	if ticks >= hold && (ticks-hold)%period == 0 {
+		return true
+	}
+	return false
+}
 
 // Задержка автоповтора кнопок (btnp hold, period)
 func (a *API) Btnp(id int, param ...int) bool {

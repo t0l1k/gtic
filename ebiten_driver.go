@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 type ebitenDriver struct {
@@ -36,20 +35,15 @@ func input(a *API) Input {
 		ebiten.SetWindowTitle(title)
 	}
 	keys := make(map[Key]bool, len(keyMap))
-	justPressed := make(map[Key]bool)
 	for eticKey, ebitenKey := range keyMap {
 		if ebiten.IsKeyPressed(ebitenKey) {
 			keys[eticKey] = true
 		}
-		if inpututil.IsKeyJustPressed(ebitenKey) {
-			justPressed[eticKey] = true
-		}
 	}
 
 	return Input{
-		keys:        keys,
-		justPressed: justPressed,
-		mouse:       mouseInput(),
+		keys:  keys,
+		mouse: mouseInput(),
 	}
 }
 
@@ -64,21 +58,84 @@ func mouseInput() mouse {
 }
 
 var keyMap = map[Key]ebiten.Key{
-	KeyA: ebiten.KeyA, KeyB: ebiten.KeyB, KeyC: ebiten.KeyC,
-	KeyD: ebiten.KeyD, KeyE: ebiten.KeyE, KeyF: ebiten.KeyF,
-	KeyG: ebiten.KeyG, KeyH: ebiten.KeyH, KeyI: ebiten.KeyI,
-	KeyJ: ebiten.KeyJ, KeyK: ebiten.KeyK, KeyL: ebiten.KeyL,
-	KeyM: ebiten.KeyM, KeyN: ebiten.KeyN, KeyO: ebiten.KeyO,
-	KeyP: ebiten.KeyP, KeyQ: ebiten.KeyQ, KeyR: ebiten.KeyR,
-	KeyS: ebiten.KeyS, KeyT: ebiten.KeyT, KeyU: ebiten.KeyU,
-	KeyV: ebiten.KeyV, KeyW: ebiten.KeyW, KeyX: ebiten.KeyX,
-	KeyY: ebiten.KeyY, KeyZ: ebiten.KeyZ,
-	Key0: ebiten.Key0, Key1: ebiten.Key1, Key2: ebiten.Key2,
-	Key3: ebiten.Key3, Key4: ebiten.Key4, Key5: ebiten.Key5,
-	Key6: ebiten.Key6, Key7: ebiten.Key7, Key8: ebiten.Key8,
-	Key9:  ebiten.Key9,
-	KeyUP: ebiten.KeyArrowUp, KeyDOWN: ebiten.KeyArrowDown,
-	KeyLEFT: ebiten.KeyArrowLeft, KeyRIGHT: ebiten.KeyArrowRight,
-	KeySPACE: ebiten.KeySpace, KeyRETURN: ebiten.KeyEnter,
-	KeyESC: ebiten.KeyEscape,
+	KeyA:            ebiten.KeyA,
+	KeyB:            ebiten.KeyB,
+	KeyC:            ebiten.KeyC,
+	KeyD:            ebiten.KeyD,
+	KeyE:            ebiten.KeyE,
+	KeyF:            ebiten.KeyF,
+	KeyG:            ebiten.KeyG,
+	KeyH:            ebiten.KeyH,
+	KeyI:            ebiten.KeyI,
+	KeyJ:            ebiten.KeyJ,
+	KeyK:            ebiten.KeyK,
+	KeyL:            ebiten.KeyL,
+	KeyM:            ebiten.KeyM,
+	KeyN:            ebiten.KeyN,
+	KeyO:            ebiten.KeyO,
+	KeyP:            ebiten.KeyP,
+	KeyQ:            ebiten.KeyQ,
+	KeyR:            ebiten.KeyR,
+	KeyS:            ebiten.KeyS,
+	KeyT:            ebiten.KeyT,
+	KeyU:            ebiten.KeyU,
+	KeyV:            ebiten.KeyV,
+	KeyW:            ebiten.KeyW,
+	KeyX:            ebiten.KeyX,
+	KeyY:            ebiten.KeyY,
+	KeyZ:            ebiten.KeyZ,
+	Key0:            ebiten.Key0,
+	Key1:            ebiten.Key1,
+	Key2:            ebiten.Key2,
+	Key3:            ebiten.Key3,
+	Key4:            ebiten.Key4,
+	Key5:            ebiten.Key5,
+	Key6:            ebiten.Key6,
+	Key7:            ebiten.Key7,
+	Key8:            ebiten.Key8,
+	Key9:            ebiten.Key9,
+	KeyMINUS:        ebiten.KeyMinus,
+	KeyEQUALS:       ebiten.KeyEqual,
+	KeyLEFTBRACKET:  ebiten.KeyBracketLeft,
+	KeyRIGHTBRACKET: ebiten.KeyBracketRight,
+	KeyBACKSLASH:    ebiten.KeyBackslash,
+	KeySEMICOLON:    ebiten.KeySemicolon,
+	KeyAPOSTROPHE:   ebiten.KeyQuote,
+	KeyGRAVE:        ebiten.KeyBackquote,
+	KeyCOMMA:        ebiten.KeyComma,
+	KeyPERIOD:       ebiten.KeyPeriod,
+	KeySLASH:        ebiten.KeySlash,
+	KeyRETURN:       ebiten.KeyEnter,
+	KeyBACKSPACE:    ebiten.KeyBackspace,
+	KeyDELETE:       ebiten.KeyDelete,
+	KeyINSERT:       ebiten.KeyInsert,
+	KeyPAGEUP:       ebiten.KeyPageUp,
+	KeyPAGEDOWN:     ebiten.KeyPageDown,
+	KeyHOME:         ebiten.KeyHome,
+	KeyEND:          ebiten.KeyEnd,
+	KeyUP:           ebiten.KeyArrowUp,
+	KeyDOWN:         ebiten.KeyArrowDown,
+	KeyLEFT:         ebiten.KeyArrowLeft,
+	KeyRIGHT:        ebiten.KeyArrowRight,
+	KeyCAPSLOCK:     ebiten.KeyCapsLock,
+	KeyCTRL:         ebiten.KeyControl,
+	KeySHIFT:        ebiten.KeyShift,
+	KeyALT:          ebiten.KeyAlt,
+	KeyESC:          ebiten.KeyEscape,
+	KeyF1:           ebiten.KeyF1,
+	KeyF2:           ebiten.KeyF2,
+	KeyF3:           ebiten.KeyF3,
+	KeyF4:           ebiten.KeyF4,
+	KeyF5:           ebiten.KeyF5,
+	KeyF6:           ebiten.KeyF6,
+	KeyF7:           ebiten.KeyF7,
+	KeyF8:           ebiten.KeyF8,
+	KeyF9:           ebiten.KeyF9,
+	KeyF10:          ebiten.KeyF10,
+	KeyF11:          ebiten.KeyF11,
+	KeyF12:          ebiten.KeyF12,
+	KeySPACE:        ebiten.KeySpace,
+	KeyTAB:          ebiten.KeyTab,
+	KeyMeta:         ebiten.KeyMeta,
+	KeyMax:          ebiten.KeyMax,
 }

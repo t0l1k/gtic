@@ -2,7 +2,6 @@ package ui
 
 import (
 	"image"
-	"log"
 )
 
 type Layout interface {
@@ -75,12 +74,10 @@ func (l FlexLayout) Apply(parent image.Rectangle, children []IElement) {
 			x += w
 		}
 	}
-	log.Println("FlexLayout:Apply:", l.orientation, l.Fractions, l.Padding, parent, len(children))
 }
 
 type BoxLayout struct {
 	orientation Orientation
-	Fractions   []float32
 	Padding     float32
 }
 

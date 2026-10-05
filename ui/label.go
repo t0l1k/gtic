@@ -4,7 +4,6 @@ import (
 	"gtic"
 	"image"
 	"image/color"
-	"log"
 
 	"golang.org/x/image/colornames"
 )
@@ -19,27 +18,18 @@ const (
 
 func NewLabel(id ElementID, s string) *Element {
 	l := NewElement(id)
-	t := l.RegisterProperty("text", s)
+	txt := l.RegisterProperty("text", s)
 	scale := l.RegisterProperty("scale", 1)
-	bg := l.RegisterProperty("bg.color", colornames.Green)
-	fg := l.RegisterProperty("fg.color", colornames.Yellow)
+	bg := l.RegisterProperty("bg", colornames.Green)
+	fg := l.RegisterProperty("fg", colornames.Yellow)
 	rect := l.Property("rect")
-	hAlign := l.RegisterProperty("horizontal.align", AlignCenter)
-	vAlign := l.RegisterProperty("vertical.align", AlignCenter)
-
-	vAlg, hAlg := AlignCenter, AlignCenter
+	hAlign := l.RegisterProperty("halign", AlignCenter)
+	vAlign := l.RegisterProperty("valign", AlignCenter)
 	textWidth := 0
 	l.OnInit = func(a *gtic.API) {
-		t.OnChange.Connect(func(v any) {
+		txt.OnChange.Connect(func(v any) {
 			msg := v.(string)
 			textWidth = a.Print(msg, 0, -100)
-			log.Println("label text len", textWidth)
-		})
-		hAlign.OnChange.Connect(func(v any) {
-			hAlg = v.(Align)
-		})
-		vAlign.OnChange.Connect(func(v any) {
-			vAlg = v.(Align)
 		})
 		textWidth = a.Print(s, 0, -100)
 	}
@@ -47,18 +37,21 @@ func NewLabel(id ElementID, s string) *Element {
 		if l.Property("hidden").Get().(bool) {
 			return
 		}
+		colBg := bg.Get().(color.Color)
+		colFg := fg.Get().(color.Color)
+		sc := scale.Get().(int)
 		r := rect.Get().(image.Rectangle)
 		x, y, w, h := gtic.RectXYWH(r)
 		padX, padY := 0, 0
-		switch vAlg {
+		switch vAlign.Get().(Align) {
 		case AlignStart:
 			padY = 0
 		case AlignCenter:
-			padY = (h - 8) / 2
+			padY = (h - 8*sc) / 2
 		case AlignEnd:
-			padY = h - 8
+			padY = h - 8*sc
 		}
-		switch hAlg {
+		switch hAlign.Get().(Align) {
 		case AlignStart:
 			padX = 0
 		case AlignCenter:
@@ -67,10 +60,8 @@ func NewLabel(id ElementID, s string) *Element {
 			padX = w - textWidth
 		}
 
-		a.Rect(x, y, w, h, gtic.NewColor(bg.Get().(color.Color)))
-		col := gtic.NewColor(fg.Get().(color.Color))
-		sc := scale.Get().(int)
-		a.Print(t.Get().(string), x+padX, y+padY, col, false, sc, false)
+		a.Rect(x, y, w, h, gtic.NewColor(colBg))
+		a.Print(txt.Get().(string), x+padX, y+padY, gtic.NewColor(colFg), false, sc, false)
 	}
 	return l
 }
