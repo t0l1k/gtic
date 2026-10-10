@@ -20,16 +20,16 @@ func (g GameState) String() string {
 	return []string{"Start", "Play", "Pause", "Game Over", "Winned"}[g]
 }
 
-type mcell struct{ Mine, Open, Flag, Wrong bool }
+type mcell struct{ Mine, Open, Flag, Wrong, First bool }
 
 type minesGame struct {
 	w, h, mines int
 	cells       []mcell
-	State       *react.Property[GameState]
+	State       *react.Var[GameState]
 }
 
 func NewMines(w, h, mines int) *minesGame {
-	g := &minesGame{w: w, h: h, mines: mines, State: react.NewProperty(GameStart)}
+	g := &minesGame{w: w, h: h, mines: mines, State: react.NewVar(GameStart)}
 	g.Reset()
 	return g
 }
@@ -91,6 +91,7 @@ func (g *minesGame) Open(x, y int) {
 	}
 	if c.Mine {
 		c.Open = true
+		c.First = true
 		g.State.Set(GameGameOver)
 		// показать все мины и ошибочные флаги
 		for i := range g.cells {

@@ -16,7 +16,7 @@ func (s *SceneTree) AddScene(v IElement) {
 	if s.scenes == nil {
 		s.scenes = make(map[ElementID]IElement)
 	}
-	id := v.Property("ID")
+	id := v.Property("id")
 	s.scenes[id.Get().(ElementID)] = v
 }
 func (s *SceneTree) Change(a *gtic.API, id ElementID) {

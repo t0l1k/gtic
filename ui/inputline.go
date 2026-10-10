@@ -15,9 +15,7 @@ func NewInputLine(sc *SceneTree, id ElementID, placeHolder string, fn react.Slot
 		CharTableUpper = "!ABCDEFGHIJKLMNOPQRSTUVWXYZ)!@#$%^&*(_+{}|:\"~<>? "
 	)
 	var (
-		input      string
 		cursor     int
-		x, y, w, _ int
 		scroll     int
 		charsWidth int = 20
 		focused    bool
@@ -39,24 +37,37 @@ func NewInputLine(sc *SceneTree, id ElementID, placeHolder string, fn react.Slot
 	colPh := gtic.NewColor(colornames.Gray)
 	fg.Set(colTxt)
 
+	cursorEl := NewElement("input.line.cursor")
+	cursorEl.OnDraw = func(a *gtic.API) {
+		if !focused || a.Time()%800 >= 500 {
+			return
+		}
+		r := cursorEl.Property("rect").Get().(image.Rectangle)
+		a.Rect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), gtic.NewColor(fg.Get().(color.Color)))
+	}
+	e.Add(cursorEl)
+
 	rect.OnChange.Connect(func(a any) {
 		r := a.(image.Rectangle)
-		x, y, w, _ = gtic.RectXYWH(r)
+		_, _, w, _ := gtic.RectXYWH(r)
 		charsWidth = min(w/6, charsWidth*6)
 		label.Property("rect").Set(r)
 	})
 
 	text.OnChange.Connect(func(a any) {
-		txt := a.(string)
+		result := a.(string)
+		if result == "" {
+			cursor = 0
+		}
 		fg.Set(colTxt)
-		if txt == "" && !focused {
-			txt = ph.Get().(string)
+		if result == "" && !focused {
+			result = ph.Get().(string)
 			fg.Set(colPh)
 		}
-		start := min(max(scroll, 0), len(txt))
-		end := min(start+charsWidth, len(txt))
-		txt = txt[start:end]
-		label.Property("text").Set(txt)
+		start := min(max(scroll, 0), len(result))
+		end := min(start+charsWidth, len(result))
+		result = result[start:end]
+		label.Property("text").Set(result)
 	})
 
 	getCh := func(a *gtic.API) string {
@@ -69,7 +80,7 @@ func NewInputLine(sc *SceneTree, id ElementID, placeHolder string, fn react.Slot
 		}
 		return ""
 	}
-	e.OnInit = func(a *gtic.API) { cursor = len(input) }
+	e.OnInit = func(a *gtic.API) {}
 	e.OnUpdate = func(a *gtic.API) {
 		if a.KeyP(gtic.KeyRETURN) {
 			fn(e)
@@ -84,7 +95,7 @@ func NewInputLine(sc *SceneTree, id ElementID, placeHolder string, fn react.Slot
 			return
 		}
 
-		prevInput := text.Get().(string)
+		input := text.Get().(string)
 		lastCursor := cursor
 		ch := getCh(a)
 		if ch != "" {
@@ -117,15 +128,14 @@ func NewInputLine(sc *SceneTree, id ElementID, placeHolder string, fn react.Slot
 		} else if len(input) >= cursor && cursor > 0 && scroll > 0 {
 			scroll = cursor - charsWidth + 1
 		}
-		if prevInput != input || lastCursor != cursor {
+		if input != text.Get().(string) || lastCursor != cursor {
 			text.Set(input)
 		}
+		fieldRect := rect.Get().(image.Rectangle)
+		x0, y0, _, _ := gtic.RectXYWH(fieldRect)
+		cursorX := x0 + (cursor-scroll)*6
+		cursorEl.Property("rect").Set(image.Rect(cursorX, y0+7, cursorX+5, y0+8))
 	}
-	e.OnDraw = func(a *gtic.API) {
-		label.Draw(a)
-		if a.Time()%800 < 500 && focused {
-			a.Rect(x+(cursor-scroll)*6, y+7, 5, 1, gtic.NewColor(fg.Get().(color.Color)))
-		}
-	}
+	e.OnDraw = func(a *gtic.API) { label.Draw(a) }
 	return e
 }

@@ -105,41 +105,41 @@ func sceneMain(fn react.SlotFn[*ui.Element]) *ui.Element {
 }
 
 func main() {
-	SC := ui.NewSceneTree()
+	st := ui.NewSceneTree()
 	gtic.BOOT = func(a *gtic.API) {
 		counter := NewCounter("scene.counter", func(e *ui.Element) {
 			txt := e.Property("text")
 			switch txt.Get().(string) {
 			case QuitDemo:
-				SC.Change(a, "scene.main")
+				st.Change(a, "scene.main")
 			}
 		})
 		tempconv := NewTemeratureConv("scene.temp.conv", func(e *ui.Element) {
 			txt := e.Property("text")
 			switch txt.Get().(string) {
 			case QuitDemo:
-				SC.Change(a, "scene.main")
+				st.Change(a, "scene.main")
 			}
-		}, SC)
+		}, st)
 		main := sceneMain(func(e *ui.Element) {
 			txt := e.Property("text")
 			switch txt.Get().(string) {
 			case Counter:
-				SC.Change(a, counter.Property("ID").Get().(ui.ElementID))
+				st.Change(a, counter.Property("id").Get().(ui.ElementID))
 			case TempConv:
-				SC.Change(a, tempconv.Property("ID").Get().(ui.ElementID))
+				st.Change(a, tempconv.Property("id").Get().(ui.ElementID))
 			case QuitApp:
 				a.Exit()
 			}
 		})
-		SC.AddScene(main)
-		SC.AddScene(counter)
-		SC.AddScene(tempconv)
-		SC.Change(a, main.Property("ID").Get().(ui.ElementID))
+		st.AddScene(main)
+		st.AddScene(counter)
+		st.AddScene(tempconv)
+		st.Change(a, main.Property("id").Get().(ui.ElementID))
 	}
 	gtic.TIC = func(a *gtic.API) {
 		a.Cls()
-		SC.TIC(a)
+		st.TIC(a)
 	}
 	if err := gtic.Load(gtic.WithTitle(Title)).Run(); err != nil {
 		log.Println(err)

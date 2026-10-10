@@ -9,6 +9,7 @@ import (
 	"gtic/react"
 	"gtic/ui"
 	"image"
+	"log"
 	"time"
 )
 
@@ -19,28 +20,9 @@ func NewMinesGame() *ui.Element {
 		leftPressed, rightPressed bool
 		btnReset, gameStopwatch   *ui.Element
 		faceSprite                *react.Var[int]
+		gameStateToken            react.Token
 	)
 	minesGame := game.NewMines(9, 9, 10)
-	minesGame.State.OnChange.Connect(func(gs game.GameState) {
-		swState := gameStopwatch.Property("state")
-		switch gs {
-		case game.GameStart:
-			swState.Set(ui.StopwatchReset)
-			faceSprite.Set(res.SprFaceIdle)
-		case game.GamePlay:
-			swState.Set(ui.StopwatchStart)
-			faceSprite.Set(res.SprFaceIdle)
-		case game.GameWin, game.GameGameOver:
-			swState.Set(ui.StopwatchStop)
-			switch gs {
-			case game.GameWin:
-				faceSprite.Set(res.SprFaceWin)
-			case game.GameGameOver:
-				faceSprite.Set(res.SprFaceDead)
-			}
-		}
-	})
-
 	gameStopwatch = ui.NewStopwatch("game.stopwatch")
 	minesLeftIcon := func() *ui.Element {
 		e := ui.NewElement("topbar.minesleft.icon")
@@ -116,7 +98,28 @@ func NewMinesGame() *ui.Element {
 		var pressed bool
 		e.OnInit = func(a *gtic.API) {}
 		e.OnUpdate = func(a *gtic.API) {
-			if minesGame.State.Get() != game.GamePlay {
+			gs := minesGame.State.Get()
+			if minesGame.State.Changed(&gameStateToken) { // изменения определяются в цикле
+				swState := gameStopwatch.Property("state")
+				switch gs {
+				case game.GameStart:
+					swState.Set(ui.StopwatchReset)
+					faceSprite.Set(res.SprFaceIdle)
+				case game.GamePlay:
+					swState.Set(ui.StopwatchStart)
+					faceSprite.Set(res.SprFaceIdle)
+				case game.GameWin, game.GameGameOver:
+					swState.Set(ui.StopwatchStop)
+					switch gs {
+					case game.GameWin:
+						faceSprite.Set(res.SprFaceWin)
+					case game.GameGameOver:
+						faceSprite.Set(res.SprFaceDead)
+					}
+				}
+				log.Println("game state", gs.String())
+			}
+			if gs != game.GamePlay {
 				return
 			}
 			if leftPressed && !pressed {
@@ -168,8 +171,33 @@ func NewMinesGame() *ui.Element {
 		e := ui.NewElement("game.cursor")
 		rect := e.Property("rect")
 		pos := e.RegisterProperty("pos", image.Point{})
+		r, c, _ := minesGame.Dim()
 		e.OnInit = func(a *gtic.API) {}
-		e.OnUpdate = func(a *gtic.API) {}
+		e.OnUpdate = func(a *gtic.API) {
+			p := pos.Get().(image.Point)
+			cur := image.Pt(p.X, p.Y)
+			switch {
+			case a.KeyP(gtic.KeyR):
+				minesGame.Reset()
+				pos.Set(image.Pt(r/2, c/2))
+			case a.KeyP(gtic.KeyLEFT):
+				cur.X = max(cur.X-1, 0)
+			case a.KeyP(gtic.KeyRIGHT):
+				cur.X = min(cur.X+1, r-1)
+			case a.KeyP(gtic.KeyUP):
+				cur.Y = max(cur.Y-1, 0)
+			case a.KeyP(gtic.KeyDOWN):
+				cur.Y = min(cur.Y+1, c-1)
+			case a.KeyP(gtic.KeyZ):
+				minesGame.Open(cur.X, cur.Y)
+			case a.KeyP(gtic.KeyX):
+				minesGame.Flag(cur.X, cur.Y)
+			}
+			if !cur.Eq(p) {
+				pos.Set(cur)
+			}
+
+		}
 		e.OnDraw = func(a *gtic.API) {
 			p := pos.Get().(image.Point)
 			x, y, w, h := gtic.RectXYWH(rect.Get().(image.Rectangle))
@@ -177,7 +205,6 @@ func NewMinesGame() *ui.Element {
 		}
 		return e
 	}()
-	curPos := cursor.Property("pos")
 
 	gameField := func() *ui.Element {
 		e := ui.NewElement("game.field")
@@ -185,7 +212,6 @@ func NewMinesGame() *ui.Element {
 		e.OnUpdate = func(a *gtic.API) {}
 		e.OnDraw = func(a *gtic.API) {
 			row, column, _ := minesGame.Dim()
-			cur := curPos.Get().(image.Point)
 			// --- поле ---
 			for y := 0; y < column; y++ {
 				for x := 0; x < row; x++ {
@@ -195,7 +221,7 @@ func NewMinesGame() *ui.Element {
 					case c.Wrong:
 						a.Spr(sprIds[res.SprCellWrong], px, py)
 					case c.Open && c.Mine:
-						if minesGame.State.Get() == game.GameGameOver && x == cur.X && y == cur.Y {
+						if minesGame.State.Get() == game.GameGameOver && c.First {
 							a.Spr(sprIds[res.SprCellBoom], px, py)
 						} else {
 							a.Spr(sprIds[res.SprCellMine], px, py)
@@ -219,7 +245,7 @@ func NewMinesGame() *ui.Element {
 	btnReset = ui.NewButton("btn.reset", "New Game", func(e *ui.Element) {
 		minesGame.Reset()
 		r, c, _ := minesGame.Dim()
-		curPos.Set(image.Pt(r/2, c/2))
+		cursor.Property("pos").Set(image.Pt(r/2, c/2))
 	})
 
 	mainScene := ui.NewElement("minesweeper.game")
@@ -244,7 +270,7 @@ func NewMinesGame() *ui.Element {
 		r, c, _ := minesGame.Dim()
 		inside := gx >= 0 && gy >= 0 && gx < r && gy < c
 		if inside {
-			curPos.Set(image.Pt(gx, gy))
+			cursor.Property("pos").Set(image.Pt(gx, gy))
 		}
 
 		// нажатие по кромке (edge), а не удержание
@@ -255,29 +281,6 @@ func NewMinesGame() *ui.Element {
 			minesGame.Flag(gx, gy)
 		}
 		leftPressed, rightPressed = lp, rp
-
-		p := curPos.Get().(image.Point)
-		cur := image.Pt(p.X, p.Y)
-		switch {
-		case a.KeyP(gtic.KeyR):
-			minesGame.Reset()
-			curPos.Set(image.Pt(r/2, c/2))
-		case a.KeyP(gtic.KeyLEFT):
-			cur.X = max(cur.X-1, 0)
-		case a.KeyP(gtic.KeyRIGHT):
-			cur.X = min(cur.X+1, r-1)
-		case a.KeyP(gtic.KeyUP):
-			cur.Y = max(cur.Y-1, 0)
-		case a.KeyP(gtic.KeyDOWN):
-			cur.Y = min(cur.Y+1, c-1)
-		case a.KeyP(gtic.KeyZ):
-			minesGame.Open(cur.X, cur.Y)
-		case a.KeyP(gtic.KeyX):
-			minesGame.Flag(cur.X, cur.Y)
-		}
-		if !cur.Eq(p) {
-			curPos.Set(cur)
-		}
 	}
 	mainScene.OnDraw = func(a *gtic.API) {}
 	return mainScene

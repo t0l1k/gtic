@@ -46,7 +46,7 @@ type Element struct {
 
 func NewElement(id ElementID) *Element {
 	e := &Element{}
-	e.RegisterProperty("ID", id)
+	e.RegisterProperty("id", id)
 	e.RegisterProperty("ready", false)
 	e.RegisterProperty("state", ElementIdle)
 	e.RegisterProperty("hidden", false)

@@ -32,6 +32,7 @@ func (s *Var[T]) Set(v T) bool {
 // Токен отслеживает версию, зафиксированную при последнем обращении, для обнаружения изменений.
 type Token uint64
 
+// Changed сравнивает версию изменений в цикле
 func (s *Var[T]) Changed(t *Token) bool {
 	if t == nil {
 		return false
