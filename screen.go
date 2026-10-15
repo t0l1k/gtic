@@ -1,37 +1,8 @@
 package gtic
 
 import (
-	"fmt"
 	"image"
-	"image/color"
 )
-
-type RGBA uint32
-
-var Transparent = NewRGBA(0, 0, 0, 0)
-
-func NewColor(value color.Color) RGBA {
-	r, g, b, a := value.RGBA()
-	return NewRGBA(uint8(r), uint8(g), uint8(b), uint8(a))
-}
-func NewRGBA(r, g, b, a uint8) RGBA {
-	return RGBA(uint32(r)<<24 | uint32(g)<<16 | uint32(b)<<8 | uint32(a))
-}
-func (c RGBA) ToBytes() (r, g, b, a uint8) {
-	return uint8(c >> 24), uint8(c >> 16), uint8(c >> 8), uint8(c)
-}
-func (a RGBA) Equal(b RGBA) bool { return a == b }
-func (c RGBA) String() string {
-	r, g, b, a := c.ToBytes()
-	return fmt.Sprintf("RGBA:%v,%v,%v,%v", r, g, b, a)
-}
-func (c RGBA) RGBA() (r, g, b, a uint32) {
-	r = uint32(c >> 24)
-	g = uint32(c >> 16)
-	b = uint32(c >> 8)
-	a = uint32(c)
-	return
-}
 
 type screen struct {
 	width, height int

@@ -8,13 +8,16 @@ import (
 	"gtic"
 	"gtic/react"
 	"image"
+	"io/fs"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
-//go:embed simple.xsb xsokoban.xsb
+//go:embed assets/levels
 var levelFiles embed.FS
 
 type levelPack struct {
@@ -24,10 +27,33 @@ type levelPack struct {
 }
 
 func loadPacks() ([]levelPack, error) {
-	files := []string{"simple.xsb", "xsokoban.xsb"}
+	return loadPacksFrom(levelFiles, "assets/levels")
+}
+
+func loadPacksFrom(source fs.FS, dir string) ([]levelPack, error) {
+	entries, err := fs.ReadDir(source, dir)
+	if err != nil {
+		return nil, fmt.Errorf("read level collection directory %q: %w", dir, err)
+	}
+	files := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext == ".xsb" || ext == ".txt" {
+			files = append(files, entry.Name())
+		}
+	}
+	sort.Strings(files)
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no .xsb or .txt level collections found in assets/levels")
+	}
+
 	packs := make([]levelPack, 0, len(files))
 	for _, file := range files {
-		data, err := levelFiles.ReadFile(file)
+		levelPath := path.Join(dir, file)
+		data, err := fs.ReadFile(source, levelPath)
 		if err != nil {
 			return nil, fmt.Errorf("read level pack %q: %w", file, err)
 		}
@@ -49,6 +75,7 @@ func parseLevels(data string) ([]string, error) {
 		levels []string
 		rows   []string
 	)
+	metadata := false
 	flush := func() error {
 		if len(rows) == 0 {
 			return nil
@@ -86,19 +113,33 @@ func parseLevels(data string) ([]string, error) {
 		line := scanner.Text()
 		line = strings.TrimSuffix(line, "\r")
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, ";") || trimmed == "" {
+		if strings.HasPrefix(trimmed, ";") {
+			if err := flush(); err != nil {
+				return nil, err
+			}
+			metadata = false
+			continue
+		}
+		if trimmed == "" {
 			if err := flush(); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		for _, tile := range line {
-			switch tile {
-			case ' ', '#', '.', '@', '+', '$', '*':
-			default:
-				return nil, fmt.Errorf("invalid tile %q on line %d", tile, lineNumber)
+		if isCollectionMetadata(trimmed) {
+			if err := flush(); err != nil {
+				return nil, err
 			}
+			metadata = true
+			continue
 		}
+		if metadata && !isLevelRow(line) {
+			continue
+		}
+		if !isLevelRow(line) {
+			return nil, fmt.Errorf("invalid level row on line %d", lineNumber)
+		}
+		metadata = false
 		rows = append(rows, line)
 	}
 	if err := scanner.Err(); err != nil {
@@ -113,7 +154,104 @@ func parseLevels(data string) ([]string, error) {
 	return levels, nil
 }
 
+func isCollectionMetadata(line string) bool {
+	lower := strings.ToLower(line)
+	for _, field := range []string{"title:", "description:", "author:", "email:", "website:"} {
+		if strings.HasPrefix(lower, field) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLevelRow(line string) bool {
+	for _, tile := range line {
+		switch tile {
+		case ' ', '#', '.', '@', '+', '$', '*':
+		default:
+			return false
+		}
+	}
+	return len(line) > 0
+}
+
 type savedProgress map[string]int
+
+type attemptResult struct {
+	Attempt int `json:"attempt"`
+	Moves   int `json:"moves"`
+	Pushes  int `json:"pushes"`
+}
+
+type levelStatistics struct {
+	Attempts  int             `json:"attempts"`
+	Successes int             `json:"successes"`
+	Best      *attemptResult  `json:"best,omitempty"`
+	Results   []attemptResult `json:"results,omitempty"`
+}
+
+type savedStatistics map[string]map[int]levelStatistics
+
+func loadStatistics(path string) (savedStatistics, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return savedStatistics{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read Sokoban statistics: %w", err)
+	}
+	var stats savedStatistics
+	if err := json.Unmarshal(data, &stats); err != nil {
+		return nil, fmt.Errorf("decode Sokoban statistics: %w", err)
+	}
+	if stats == nil {
+		stats = savedStatistics{}
+	}
+	return stats, nil
+}
+
+func saveStatistics(path string, stats savedStatistics) error {
+	data, err := json.MarshalIndent(stats, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode Sokoban statistics: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create statistics directory: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write Sokoban statistics: %w", err)
+	}
+	return nil
+}
+
+func (s savedStatistics) level(pack string, level int) levelStatistics {
+	return s[pack][level]
+}
+
+func (s savedStatistics) startAttempt(pack string, level int) int {
+	if s[pack] == nil {
+		s[pack] = make(map[int]levelStatistics)
+	}
+	stats := s[pack][level]
+	stats.Attempts++
+	s[pack][level] = stats
+	return stats.Attempts
+}
+
+func (s savedStatistics) recordSuccess(pack string, level int, result attemptResult) {
+	if s[pack] == nil {
+		s[pack] = make(map[int]levelStatistics)
+	}
+	stats := s[pack][level]
+	stats.Successes++
+	stats.Results = append(stats.Results, result)
+	if stats.Best == nil || result.Moves < stats.Best.Moves ||
+		(result.Moves == stats.Best.Moves && result.Pushes < stats.Best.Pushes) {
+		best := result
+		stats.Best = &best
+	}
+	s[pack][level] = stats
+}
 
 func loadProgress() (savedProgress, string, error) {
 	configDir, err := os.UserConfigDir()
@@ -135,7 +273,6 @@ func loadProgress() (savedProgress, string, error) {
 	if progress == nil {
 		progress = savedProgress{}
 	}
-	log.Println("load:", path, progress)
 	return progress, path, nil
 }
 
@@ -150,7 +287,6 @@ func saveProgress(path string, progress savedProgress) error {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write Sokoban progress: %w", err)
 	}
-	log.Println("save:", path, progress)
 	return nil
 }
 
@@ -179,15 +315,15 @@ func (d Dim) Pos(idx int) (int, int) { return idx % d.row, idx / d.row }
 type Tile int
 
 const (
-	Floor  Tile = iota //' ', '#', '.', '@', '+', '$', '*'
-	Wall               // #
-	Goal               // .
-	Player             // @
-	Box                // $
+	Floor  Tile = iota
+	Wall        // #
+	Goal        // .
+	Player      // @
+	Box         // $
 )
 
 func (t Tile) String() string { return []string{" ", "#", ".", "@", "$"}[t] }
-func (t Tile) Color() int     { return []int{12, 7, 6, 11, 3}[t] }
+func (t Tile) Color() int     { return []int{13, 15, 3, 10, 2}[t] }
 
 type Cell struct {
 	react.Var[Tile]
@@ -299,18 +435,23 @@ func (f Field) MovePlayer(a, b int) {
 }
 
 type Board struct {
-	Dim     Dim
-	Field   Field
-	win     bool
-	level   string
-	moves   int
-	pushes  int
-	history []boardState
+	Dim        Dim
+	Field      Field
+	win        bool
+	level      string
+	Moves      int
+	Pushes     int
+	history    []boardSnapshot
+	historyPos int
 }
 
-type boardState struct {
-	player int
-	boxes  []int
+type cellSnapshot struct {
+	player bool
+	box    bool
+}
+
+type boardSnapshot struct {
+	cells  []cellSnapshot
 	moves  int
 	pushes int
 	win    bool
@@ -322,58 +463,26 @@ func NewBoard(level string) *Board {
 		Dim:   NewDim(level),
 		level: level,
 	}
+	b.recordHistory()
 	return b
 }
 func (b *Board) Reset() {
 	b.Field = NewField().Load(b.level)
 	b.Dim = NewDim(b.level)
 	b.win = false
-	b.moves = 0
-	b.pushes = 0
+	b.Moves = 0
+	b.Pushes = 0
 	b.history = nil
-}
-func (b *Board) saveState() {
-	state := boardState{
-		player: b.Field.PlayerAt(),
-		moves:  b.moves,
-		pushes: b.pushes,
-		win:    b.win,
-	}
-	for i, cell := range b.Field {
-		if cell.box {
-			state.boxes = append(state.boxes, i)
-		}
-	}
-	b.history = append(b.history, state)
-}
-func (b *Board) Undo() bool {
-	if len(b.history) == 0 {
-		return false
-	}
-	state := b.history[len(b.history)-1]
-	b.history = b.history[:len(b.history)-1]
-	for _, cell := range b.Field {
-		cell.player = false
-		cell.box = false
-	}
-	if state.player >= 0 {
-		b.Field[state.player].player = true
-	}
-	for _, idx := range state.boxes {
-		b.Field[idx].box = true
-	}
-	b.moves = state.moves
-	b.pushes = state.pushes
-	b.win = state.win
-	return true
+	b.historyPos = 0
+	b.recordHistory()
 }
 func (b *Board) Input(a *gtic.API) {
-	if a.KeyP(gtic.KeyR) {
-		b.Reset()
-		return
-	}
 	if a.KeyP(gtic.KeyU) {
 		b.Undo()
+		return
+	}
+	if a.KeyP(gtic.KeyF) {
+		b.Redo()
 		return
 	}
 	if b.win {
@@ -391,6 +500,47 @@ func (b *Board) Input(a *gtic.API) {
 	if a.KeyP(gtic.KeyDOWN) {
 		b.Move(Down)
 	}
+}
+func (b *Board) recordHistory() {
+	snapshot := boardSnapshot{
+		cells:  make([]cellSnapshot, len(b.Field)),
+		moves:  b.Moves,
+		pushes: b.Pushes,
+		win:    b.win,
+	}
+	for i, cell := range b.Field {
+		snapshot.cells[i] = cellSnapshot{player: cell.player, box: cell.box}
+	}
+	if b.historyPos < len(b.history)-1 {
+		b.history = b.history[:b.historyPos+1]
+	}
+	b.history = append(b.history, snapshot)
+	b.historyPos = len(b.history) - 1
+}
+func (b *Board) restoreHistory(pos int) {
+	snapshot := b.history[pos]
+	for i, cell := range b.Field {
+		cell.player = snapshot.cells[i].player
+		cell.box = snapshot.cells[i].box
+	}
+	b.Moves = snapshot.moves
+	b.Pushes = snapshot.pushes
+	b.win = snapshot.win
+	b.historyPos = pos
+}
+func (b *Board) Undo() bool {
+	if b.historyPos == 0 {
+		return false
+	}
+	b.restoreHistory(b.historyPos - 1)
+	return true
+}
+func (b *Board) Redo() bool {
+	if b.historyPos >= len(b.history)-1 {
+		return false
+	}
+	b.restoreHistory(b.historyPos + 1)
+	return true
 }
 func (b *Board) IsWin() bool {
 	count := b.Field.GoalCount()
@@ -411,67 +561,59 @@ func (b *Board) PushBox(idx int, direction image.Point) bool {
 	if newCell.Get() == Wall || newCell.box {
 		return false
 	}
-	b.saveState()
 	boxIdx := b.Dim.Idx(boxPt.X, boxPt.Y)
 	b.Field.MoveBox(b.Dim.Idx(newPt.X, newPt.Y), boxIdx)
 	b.Field.MovePlayer(boxIdx, b.Field.PlayerAt())
-	b.moves++
-	b.pushes++
+	b.Moves++
+	b.Pushes++
 	b.win = b.IsWin()
+	b.recordHistory()
 	return true
 }
-func (b *Board) Move(direction image.Point) {
+func (b *Board) Move(direction image.Point) bool {
 	playerIdx := b.Field.PlayerAt()
 	if playerIdx < 0 {
-		return
+		return false
 	}
 	playerPt := image.Pt(b.Dim.Pos(playerIdx))
 	newPt := playerPt.Add(direction)
 	if newPt.X < 0 || newPt.Y < 0 || newPt.X >= b.Dim.row || newPt.Y >= b.Dim.column {
-		return
+		return false
 	}
-	var (
-		newCell *Cell
-	)
-	newCell = b.Field.Cell(b.Dim.Idx(newPt.X, newPt.Y))
+	newIdx := b.Dim.Idx(newPt.X, newPt.Y)
+	newCell := b.Field.Cell(newIdx)
 	switch newCell.Get() {
 	case Wall:
-		return
+		return false
 	case Floor:
 		if newCell.box {
-			b.PushBox(b.Dim.Idx(newPt.X, newPt.Y), direction)
-			return
+			return b.PushBox(newIdx, direction)
 		}
-		b.saveState()
-		b.Field.MovePlayer(b.Dim.Idx(newPt.X, newPt.Y), playerIdx)
-		b.moves++
-		b.win = b.IsWin()
 	}
+	b.Field.MovePlayer(newIdx, playerIdx)
+	b.Moves++
+	b.win = b.IsWin()
+	b.recordHistory()
+	return true
 }
 func (b *Board) Draw(a *gtic.API) {
-	grid := 8
-
 	for i, cell := range b.Field {
 		x, y := b.Dim.Pos(i)
 		switch {
 		case cell.Get() == Wall:
-			a.Rect(x*grid, y*grid, grid, grid, a.Pal(cell.Color()))
+			a.Rect(x*8, y*8, 8, 8, a.Pal(cell.Color()))
 		case cell.Get() == Floor:
-			a.Rect(x*grid, y*grid, grid, grid, a.Pal(Tile(Floor).Color()))
+			a.Rect(x*8, y*8, 8, 8, a.Pal(Tile(Floor).Color()))
 			switch {
 			case cell.box:
-				a.Circ(x*grid+4, y*grid+4, 3, a.Pal(cell.Color()))
+				a.Circ(x*8+4, y*8+4, 4, a.Pal(cell.Color()))
 			case cell.player:
-				a.Circ(x*grid+4, y*grid+4, 3, a.Pal(cell.Color()))
+				a.Circ(x*8+4, y*8+4, 4, a.Pal(cell.Color()))
 			case cell.goal:
-				a.Rect(x*grid, y*grid, grid, grid, a.Pal(Tile(Floor).Color()))
-				a.Circ(x*grid+4, y*grid+4, 3, a.Pal(cell.Color()))
+				a.Rect(x*8, y*8, 8, 8, a.Pal(Tile(Floor).Color()))
+				a.Circ(x*8+4, y*8+4, 4, a.Pal(cell.Color()))
 			}
 		}
-	}
-	for i := 0; i < a.Bounds().Height; i++ {
-		a.Line(0, i*grid, a.Bounds().Width, i*grid, a.Pal(1))
-		a.Line(i*grid, 0, i*grid, a.Bounds().Height, a.Pal(1))
 	}
 }
 func (b *Board) String() string {
@@ -504,14 +646,19 @@ func (b *Board) String() string {
 }
 
 type game struct {
-	packs        []levelPack
-	progress     savedProgress
-	progressPath string
-	selectedPack int
-	currentLevel int
-	board        *Board
-	playing      bool
-	status       string
+	packs          []levelPack
+	progress       savedProgress
+	progressPath   string
+	statistics     savedStatistics
+	statisticsPath string
+	attempt        int
+	resultRecorded bool
+	selectedPack   int
+	selectedLevel  int
+	currentLevel   int
+	board          *Board
+	playing        bool
+	status         string
 }
 
 func newGame() (*game, error) {
@@ -523,13 +670,21 @@ func newGame() (*game, error) {
 	if err != nil {
 		return nil, err
 	}
+	statisticsPath := filepath.Join(filepath.Dir(progressPath), "sokoban-statistics.json")
+	statistics, err := loadStatistics(statisticsPath)
+	if err != nil {
+		return nil, err
+	}
 	for _, pack := range packs {
 		progress[pack.file] = min(max(progress[pack.file], 0), len(pack.levels))
 	}
 	return &game{
-		packs:        packs,
-		progress:     progress,
-		progressPath: progressPath,
+		packs:          packs,
+		progress:       progress,
+		progressPath:   progressPath,
+		statistics:     statistics,
+		statisticsPath: statisticsPath,
+		selectedLevel:  min(progress[packs[0].file], len(packs[0].levels)-1),
 	}, nil
 }
 
@@ -537,11 +692,15 @@ func (g *game) Input(a *gtic.API) {
 	if !g.playing {
 		switch {
 		case a.KeyP(gtic.KeyLEFT):
-			g.selectedPack = (g.selectedPack + len(g.packs) - 1) % len(g.packs)
+			g.selectPack(-1)
 			g.status = ""
 		case a.KeyP(gtic.KeyRIGHT):
-			g.selectedPack = (g.selectedPack + 1) % len(g.packs)
+			g.selectPack(1)
 			g.status = ""
+		case a.KeyP(gtic.KeyUP):
+			g.selectLevel(-1)
+		case a.KeyP(gtic.KeyDOWN):
+			g.selectLevel(1)
 		case a.KeyP(gtic.KeyRETURN):
 			g.startPack()
 		}
@@ -552,56 +711,82 @@ func (g *game) Input(a *gtic.API) {
 	}
 
 	if a.KeyP(gtic.KeyESC) && g.playing {
-		g.board = nil
 		g.playing = false
+		g.selectedLevel = g.currentLevel
 		return
 	}
 	if a.KeyP(gtic.KeyR) {
-		g.board.Reset()
+		g.startAttempt()
 		return
 	}
-	if g.board.win {
-		if a.KeyP(gtic.KeyU) {
-			g.board.Undo()
-			return
-		}
-		if a.KeyP(gtic.KeyRETURN) {
-			g.nextLevel()
-		}
+	if g.board.win && a.KeyP(gtic.KeyRETURN) {
+		g.nextLevel()
 		return
 	}
 
+	wasWin := g.board.win
 	g.board.Input(a)
-	if g.board.IsWin() {
-		g.board.win = true
+	if !wasWin && g.board.win && !g.resultRecorded {
 		g.saveCompletedLevel()
 	}
 }
 
-func (g *game) startPack() {
+func (g *game) selectPack(direction int) {
+	g.selectedPack = (g.selectedPack + direction + len(g.packs)) % len(g.packs)
+	g.selectedLevel = min(g.progress[g.packs[g.selectedPack].file], len(g.packs[g.selectedPack].levels)-1)
+}
+
+func (g *game) selectLevel(direction int) {
 	pack := g.packs[g.selectedPack]
-	g.currentLevel = g.progress[pack.file]
-	if g.currentLevel >= len(pack.levels) {
-		g.currentLevel = 0
-	}
-	g.board = NewBoard(pack.levels[g.currentLevel])
+	g.selectedLevel = (g.selectedLevel + direction + len(pack.levels)) % len(pack.levels)
+	g.status = ""
+}
+
+func (g *game) startPack() {
+	g.currentLevel = g.selectedLevel
 	g.playing = true
+	g.status = ""
+	g.startAttempt()
+}
+
+func (g *game) startAttempt() {
+	pack := g.packs[g.selectedPack]
+	g.board = NewBoard(pack.levels[g.currentLevel])
+	if g.statistics == nil {
+		g.statistics = savedStatistics{}
+	}
+	g.attempt = g.statistics.startAttempt(pack.file, g.currentLevel+1)
+	g.resultRecorded = false
+	if err := saveStatistics(g.statisticsPath, g.statistics); err != nil {
+		g.status = "Statistics save failed; see log."
+		log.Printf("save Sokoban statistics: %v", err)
+		return
+	}
 	g.status = ""
 }
 
 func (g *game) saveCompletedLevel() {
 	pack := g.packs[g.selectedPack]
+	result := attemptResult{
+		Attempt: g.attempt,
+		Moves:   g.board.Moves,
+		Pushes:  g.board.Pushes,
+	}
+	g.statistics.recordSuccess(pack.file, g.currentLevel+1, result)
+	g.resultRecorded = true
+	if err := saveStatistics(g.statisticsPath, g.statistics); err != nil {
+		g.status = "Statistics save failed; see log."
+		log.Printf("save Sokoban statistics: %v", err)
+	}
 	nextLevel := g.currentLevel + 1
-	if nextLevel <= g.progress[pack.file] {
-		return
+	if nextLevel > g.progress[pack.file] {
+		g.progress[pack.file] = nextLevel
+		if err := saveProgress(g.progressPath, g.progress); err != nil {
+			g.status = "Progress save failed; see log."
+			log.Printf("save Sokoban progress: %v", err)
+			return
+		}
 	}
-	g.progress[pack.file] = nextLevel
-	if err := saveProgress(g.progressPath, g.progress); err != nil {
-		g.status = "Progress save failed; see log."
-		log.Printf("save Sokoban progress: %v", err)
-		return
-	}
-	g.status = ""
 }
 
 func (g *game) nextLevel() {
@@ -609,16 +794,17 @@ func (g *game) nextLevel() {
 	if g.currentLevel+1 == len(pack.levels) {
 		g.board = nil
 		g.playing = false
-		g.status = "Pack complete. Enter to replay from the start."
+		g.selectedLevel = g.currentLevel
+		g.status = "Pack complete."
 		return
 	}
 	g.currentLevel++
-	g.board = NewBoard(pack.levels[g.currentLevel])
-	g.status = ""
+	g.selectedLevel = g.currentLevel
+	g.startAttempt()
 }
 
 func (g *game) Draw(a *gtic.API) {
-	a.Cls(a.Pal(14))
+	a.Cls()
 	if !g.playing {
 		g.drawPackMenu(a)
 		return
@@ -626,11 +812,17 @@ func (g *game) Draw(a *gtic.API) {
 
 	g.board.Draw(a)
 	pack := g.packs[g.selectedPack]
-	a.Print(fmt.Sprintf("%s %d/%d  Moves: %d  Pushes: %d", pack.name, g.currentLevel+1, len(pack.levels), g.board.moves, g.board.pushes), 0, a.Bounds().Height-16, a.Pal(12))
+	stats := g.statistics.level(pack.file, g.currentLevel+1)
+	a.Print(fmt.Sprintf("%s %d/%d", pack.name, g.currentLevel+1, len(pack.levels)), 0, a.Bounds().Height-16, a.Pal(12))
+	a.Print(fmt.Sprintf("Moves:%d Pushes:%d", g.board.Moves, g.board.Pushes), 0, a.Bounds().Height-32, a.Pal(12))
+	a.Print(fmt.Sprintf("Try:%d Attempts:%d Won:%d", g.attempt, stats.Attempts, stats.Successes), 0, a.Bounds().Height-40, a.Pal(12))
+	if stats.Best != nil {
+		a.Print(fmt.Sprintf("Best:%d moves/%d pushes", stats.Best.Moves, stats.Best.Pushes), 0, a.Bounds().Height-48, a.Pal(11))
+	}
 	if g.board.win {
-		a.Print("Level clear! U: undo  Enter: next", 0, a.Bounds().Height-8, a.Pal(11))
+		a.Print("Clear! Enter: next U: undo F: redo", 0, a.Bounds().Height-8, a.Pal(11))
 	} else {
-		a.Print("Arrows: move  U: undo  R: restart", 0, a.Bounds().Height-8, a.Pal(12))
+		a.Print("Arrows: move U: undo F: redo R: retry", 0, a.Bounds().Height-8, a.Pal(12))
 	}
 	if g.status != "" {
 		a.Print(g.status, 0, a.Bounds().Height-24, a.Pal(6))
@@ -638,24 +830,56 @@ func (g *game) Draw(a *gtic.API) {
 }
 
 func (g *game) drawPackMenu(a *gtic.API) {
-	a.Print("SOKOBAN", 8, 8, a.Pal(12))
-	a.Print("< "+g.packs[g.selectedPack].name+" >", 8, 32, a.Pal(11))
+	a.Print("SOKOBAN", 4, 4, a.Pal(12))
+	a.Print("< "+g.packs[g.selectedPack].name+" >", 4, 18, a.Pal(11))
 	pack := g.packs[g.selectedPack]
 	completed := g.progress[pack.file]
 	if completed == len(pack.levels) {
-		a.Print(fmt.Sprintf("All %d levels complete", completed), 8, 48, a.Pal(12))
+		a.Print(fmt.Sprintf("All %d levels complete", completed), 4, 30, a.Pal(12))
 	} else {
-		a.Print(fmt.Sprintf("Progress: %d/%d", completed, len(pack.levels)), 8, 48, a.Pal(12))
+		a.Print(fmt.Sprintf("Progress: %d/%d", completed, len(pack.levels)), 4, 30, a.Pal(12))
 	}
-	a.Print("Left/Right: pack", 8, 72, a.Pal(12))
-	if completed == len(pack.levels) {
-		a.Print("Enter: replay from start", 8, 88, a.Pal(12))
+	a.Print(fmt.Sprintf("Level %d/%d", g.selectedLevel+1, len(pack.levels)), 4, 44, a.Pal(11))
+	g.drawLevelPreview(a, pack.levels[g.selectedLevel], 8, 60, 104, 42)
+
+	stats := g.statistics.level(pack.file, g.selectedLevel+1)
+	a.Print("Statistics", 120, 60, a.Pal(12))
+	a.Print(fmt.Sprintf("Attempts: %d", stats.Attempts), 120, 72, a.Pal(12))
+	a.Print(fmt.Sprintf("Won: %d", stats.Successes), 120, 84, a.Pal(12))
+	if stats.Best == nil {
+		a.Print("Best: --", 120, 96, a.Pal(11))
 	} else {
-		a.Print("Enter: resume", 8, 88, a.Pal(12))
+		a.Print(fmt.Sprintf("Best: %d moves", stats.Best.Moves), 120, 96, a.Pal(11))
+		a.Print(fmt.Sprintf("%d pushes (#%d)", stats.Best.Pushes, stats.Best.Attempt), 120, 108, a.Pal(11))
 	}
-	a.Print("Esc: quit", 8, 104, a.Pal(12))
+	a.Print("Left/Right: collection  Up/Down: level", 4, 116, a.Pal(12))
+	a.Print("Enter: play  Esc: quit", 4, 128, a.Pal(12))
 	if g.status != "" {
-		a.Print(g.status, 8, 120, a.Pal(6))
+		a.Print(g.status, 120, 44, a.Pal(6))
+	}
+}
+
+func (g *game) drawLevelPreview(a *gtic.API, level string, x, y, maxWidth, maxHeight int) {
+	board := NewBoard(level)
+	cellSize := max(1, min(maxWidth/board.Dim.row, maxHeight/board.Dim.column))
+	for i, cell := range board.Field {
+		cellX, cellY := board.Dim.Pos(i)
+		cellX = x + cellX*cellSize
+		cellY = y + cellY*cellSize
+		background := Tile(Floor).Color()
+		if cell.goal {
+			background = Tile(Goal).Color()
+		}
+		if cell.Get() == Wall {
+			background = Tile(Wall).Color()
+		}
+		a.Rect(cellX, cellY, cellSize, cellSize, a.Pal(background))
+		switch {
+		case cell.player:
+			a.Circ(cellX+cellSize/2, cellY+cellSize/2, max(1, cellSize/2-1), a.Pal(Tile(Player).Color()))
+		case cell.box:
+			a.Circ(cellX+cellSize/2, cellY+cellSize/2, max(1, cellSize/2-1), a.Pal(Tile(Box).Color()))
+		}
 	}
 }
 
