@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"gtic"
 	"image"
-	"log"
 	"strconv"
 	"strings"
 
@@ -30,10 +29,7 @@ type Board struct {
 	playerSprId gtic.SpriteID
 }
 
-type cellSnapshot struct {
-	player bool
-	box    bool
-}
+type cellSnapshot struct{ Tile }
 
 type boardSnapshot struct {
 	cells  []cellSnapshot
@@ -96,7 +92,7 @@ func (b *Board) recordHistory() {
 		win:    b.Win,
 	}
 	for i, cell := range b.Field {
-		snapshot.cells[i] = cellSnapshot{player: cell.Player, box: cell.Box}
+		snapshot.cells[i] = cellSnapshot{cell.Get()}
 	}
 	if b.historyPos < len(b.history)-1 {
 		b.history = b.history[:b.historyPos+1]
@@ -107,8 +103,7 @@ func (b *Board) recordHistory() {
 func (b *Board) restoreHistory(pos int) {
 	snapshot := b.history[pos]
 	for i, cell := range b.Field {
-		cell.Player = snapshot.cells[i].player
-		cell.Box = snapshot.cells[i].box
+		cell.Set(snapshot.cells[i].Tile)
 	}
 	b.Moves = snapshot.moves
 	b.Pushes = snapshot.pushes
@@ -132,7 +127,7 @@ func (b *Board) Redo() bool {
 func (b *Board) IsWin() bool {
 	count := b.Field.GoalCount()
 	for _, cell := range b.Field {
-		if cell.IsBoxAtGoal() {
+		if cell.IsGoalBox() {
 			count--
 		}
 	}
@@ -145,7 +140,7 @@ func (b *Board) PushBox(idx int, direction image.Point) bool {
 		return false
 	}
 	newCell := b.Field.Cell(b.Dim.Idx(newPt.X, newPt.Y))
-	if newCell.Get() == Wall || newCell.Box {
+	if newCell.IsWall() || newCell.IsBox() || newCell.IsGoalBox() {
 		return false
 	}
 	boxIdx := b.Dim.Idx(boxPt.X, boxPt.Y)
@@ -155,7 +150,6 @@ func (b *Board) PushBox(idx int, direction image.Point) bool {
 	b.Pushes++
 	b.Win = b.IsWin()
 	b.recordHistory()
-	log.Println("push", b.String())
 	return true
 }
 func (b *Board) Move(direction image.Point) bool {
@@ -170,19 +164,16 @@ func (b *Board) Move(direction image.Point) bool {
 	}
 	newIdx := b.Dim.Idx(newPt.X, newPt.Y)
 	newCell := b.Field.Cell(newIdx)
-	switch newCell.Get() {
-	case Wall:
+	if newCell.IsWall() {
 		return false
-	case Floor:
-		if newCell.Box {
-			return b.PushBox(newIdx, direction)
-		}
+	}
+	if newCell.IsBox() || newCell.IsGoalBox() {
+		return b.PushBox(newIdx, direction)
 	}
 	b.Field.MovePlayer(newIdx, playerIdx)
 	b.Moves++
 	b.Win = b.IsWin()
 	b.recordHistory()
-	log.Println("move", b.String())
 	return true
 }
 
@@ -212,7 +203,7 @@ func (b *Board) PathTo(x, y int) ([]image.Point, bool) {
 		return nil, true
 	}
 	targetCell := b.Field.Cell(target)
-	if targetCell.Get() == Wall || targetCell.Box {
+	if targetCell.IsWall() || targetCell.IsBox() || targetCell.IsGoalBox() {
 		return nil, false
 	}
 
@@ -236,7 +227,7 @@ func (b *Board) PathTo(x, y int) ([]image.Point, bool) {
 			}
 			next := b.Dim.Idx(nextX, nextY)
 			cell := b.Field.Cell(next)
-			if parents[next] != -1 || cell.Get() == Wall || cell.Box {
+			if parents[next] != -1 || cell.IsWall() || cell.IsBox() || cell.IsGoalBox() {
 				continue
 			}
 			parents[next] = current
@@ -269,7 +260,7 @@ type boxPlanStep struct {
 }
 
 func (b *Board) PathBoxTo(boxIdx, targetX, targetY int) ([]image.Point, bool) {
-	if b.Win || boxIdx < 0 || boxIdx >= len(b.Field) || !b.Field[boxIdx].Box ||
+	if b.Win || boxIdx < 0 || boxIdx >= len(b.Field) || !b.Field.IsBoxAt(boxIdx) ||
 		targetX < 0 || targetY < 0 || targetX >= b.Dim.Row || targetY >= b.Dim.Column {
 		return nil, false
 	}
@@ -281,7 +272,7 @@ func (b *Board) PathBoxTo(boxIdx, targetX, targetY int) ([]image.Point, bool) {
 		return nil, true
 	}
 	targetCell := b.Field.Cell(target)
-	if targetCell.Get() == Wall || targetCell.Box {
+	if targetCell.IsWall() || b.Field.IsBoxAt(target) {
 		return nil, false
 	}
 	player := b.Field.PlayerAt()
@@ -327,11 +318,11 @@ func (b *Board) PathBoxTo(boxIdx, targetX, targetY int) ([]image.Point, bool) {
 					continue
 				}
 				boxCell := b.Field.Cell(nextBox)
-				if boxCell.Get() == Wall || (boxCell.Box && nextBox != boxIdx) {
+				if boxCell.IsWall() || (b.Field.IsBoxAt(nextBox) && nextBox != boxIdx) {
 					continue
 				}
 				next.box = nextBox
-			} else if cell.Box && nextPlayer != boxIdx {
+			} else if b.Field.IsBoxAt(nextPlayer) && nextPlayer != boxIdx {
 				continue
 			}
 			if visited[next] {
@@ -367,23 +358,21 @@ func (b *Board) Draw(a *gtic.API) {
 	for i, cell := range b.Field {
 		x, y := b.Dim.Pos(i)
 		switch {
-		case cell.Get() == Wall:
+		case cell.IsWall():
 			a.Rect(x*8, y*8, 8, 8, gtic.NewColor(Tile(Wall).Color()))
-		case cell.Get() == Floor:
+		case cell.IsFloor():
 			a.Rect(x*8, y*8, 8, 8, gtic.NewColor(Tile(Floor).Color()))
-			switch {
-			case cell.Box && cell.Goal:
-				drawBox(a, x*8, y*8, true)
-			case cell.Player:
-				if b.playerSprId == -1 {
-					b.playerSprId = LoadSprites(a)
-				}
-				drawPlayer(a, x*8, y*8, b.playerSprId)
-			case cell.Goal:
-				drawGoal(a, x*8, y*8)
-			case cell.Box:
-				drawBox(a, x*8, y*8, false)
+		case cell.IsGoalBox():
+			drawBox(a, x*8, y*8, true)
+		case cell.IsPlayer(), cell.IsGoalPlayer():
+			if b.playerSprId == -1 {
+				b.playerSprId = LoadSprites(a)
 			}
+			drawPlayer(a, x*8, y*8, b.playerSprId)
+		case cell.IsGoal():
+			drawGoal(a, x*8, y*8)
+		case cell.IsBox():
+			drawBox(a, x*8, y*8, false)
 		}
 	}
 }

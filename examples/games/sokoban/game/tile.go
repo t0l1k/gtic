@@ -9,21 +9,20 @@ import (
 type Tile int
 
 const (
-	Floor Tile = iota
-	FloorGoal
-	Goal       // .
-	GoalPlayer // +
-	GoalBox    // *
-	Player     // @
-	Box        // $
-	Wall       // #
+	Floor      Tile = iota
+	Goal            // .
+	GoalPlayer      // +
+	GoalBox         // *
+	Player          // @
+	Box             // $
+	Wall            // #
 )
 
-func (t Tile) String() string { return []string{" ", " ", ".", "+", "*", "@", "$", "#"}[t] }
+func (t Tile) String() string { return []string{"_", ".", "+", "*", "@", "$", "#"}[t] }
+func (t Tile) Rune() rune     { return []rune{' ', '.', '+', '*', '@', '$', '#'}[t] }
 func (t Tile) Color() color.Color {
 	return []color.Color{
 		colornames.Navy,
-		colornames.Midnightblue,
 		colornames.Gold,
 		colornames.Blue,
 		colornames.Goldenrod,

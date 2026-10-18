@@ -1,7 +1,5 @@
 package game
 
-import "gtic/react"
-
 type Field []*Cell
 
 func NewField() Field { return Field{} }
@@ -10,29 +8,22 @@ func (f Field) Load(level string) Field {
 		if rune == '\n' {
 			continue
 		}
-		cell := &Cell{Var: *react.NewVar(Floor)}
+		cell := NewCell()
 		switch rune {
-		case ' ':
-			cell.Set(Floor)
-		case '#':
-			cell.Set(Wall)
-		case '.':
-			cell.Set(Floor)
-			cell.Goal = true
-		case '@':
-			cell.Set(Floor)
-			cell.Player = true
-		case '+':
-			cell.Set(Floor)
-			cell.Goal = true
-			cell.Player = true
-		case '$':
-			cell.Set(Floor)
-			cell.Box = true
-		case '*':
-			cell.Set(Floor)
-			cell.Goal = true
-			cell.Box = true
+		case Floor.Rune():
+			cell.SetFloor()
+		case Wall.Rune():
+			cell.SetWall()
+		case Goal.Rune():
+			cell.SetGoal()
+		case Player.Rune():
+			cell.SetPlayer()
+		case GoalPlayer.Rune():
+			cell.SetGoalPlayer()
+		case Box.Rune():
+			cell.SetBox()
+		case GoalBox.Rune():
+			cell.SetGoalBox()
 		}
 		f = append(f, cell)
 	}
@@ -41,31 +32,62 @@ func (f Field) Load(level string) Field {
 func (f Field) Cell(idx int) *Cell { return f[idx] }
 func (f Field) PlayerAt() int {
 	for i, cell := range f {
-		if cell.Player {
+		if cell.IsPlayer() || cell.IsGoalPlayer() {
 			return i
 		}
 	}
 	return -1
 }
-func (f Field) IsBoxAt(idx int) bool { return f[idx].Box }
+func (f Field) IsBoxAt(idx int) bool { return f[idx].IsBox() || f[idx].IsGoalBox() }
 func (f Field) GoalCount() int {
 	count := 0
 	for _, cell := range f {
-		if cell.Goal {
+		if cell.IsGoal() || cell.IsGoalPlayer() || cell.IsGoalBox() {
 			count++
 		}
 	}
 	return count
 }
 func (f Field) MoveBox(a, b int) {
-	aValue := f.Cell(a).Box
-	bValue := f.Cell(b).Box
-	f[a].Box = bValue
-	f[b].Box = aValue
+	aValue := f.Cell(a).Get() // floor, goal
+	bValue := f.Cell(b).Get() // box, goalBox
+	switch {
+	case aValue == Wall|Player|GoalPlayer:
+		panic("push failed")
+	case aValue == Floor && bValue == Box:
+		aValue = Floor
+		bValue = Box
+	case aValue == Floor && bValue == GoalBox:
+		aValue = Goal
+		bValue = Box
+	case aValue == Goal && bValue == Box:
+		aValue = Floor
+		bValue = GoalBox
+	case aValue == Goal && bValue == GoalBox:
+		aValue = Goal
+		bValue = GoalBox
+	}
+	f[a].Set(bValue)
+	f[b].Set(aValue)
 }
 func (f Field) MovePlayer(a, b int) {
-	aValue := f.Cell(a).Player
-	bValue := f.Cell(b).Player
-	f[a].Player = bValue
-	f[b].Player = aValue
+	aValue := f.Cell(a).Get() // floor, goal
+	bValue := f.Cell(b).Get() // player, goalPlayer
+	switch {
+	case aValue == Wall|Box|GoalBox:
+		panic("move failed")
+	case aValue == Floor && bValue == Player:
+		bValue = Player
+	case aValue == Floor && bValue == GoalPlayer:
+		aValue = Goal
+		bValue = Player
+	case aValue == Goal && bValue == Player:
+		bValue = GoalPlayer
+		aValue = Floor
+	case aValue == Goal && bValue == GoalPlayer:
+		aValue = Goal
+		bValue = GoalPlayer
+	}
+	f[a].Set(bValue)
+	f[b].Set(aValue)
 }

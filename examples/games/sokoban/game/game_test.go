@@ -25,6 +25,24 @@ func TestPathBoxToPlansWalkingAndPushes(t *testing.T) {
 	}
 }
 
+func TestPathBoxToAcceptsBoxOnGoal(t *testing.T) {
+	board := NewBoard("########\n#@ *  .#\n########")
+	box := board.Dim.Idx(3, 1)
+
+	path, ok := board.PathBoxTo(box, 5, 1)
+	if !ok {
+		t.Fatal("expected a path for a box on a goal")
+	}
+	for _, direction := range path {
+		if !board.Move(direction) {
+			t.Fatalf("planned move %v was rejected", direction)
+		}
+	}
+	if !board.Field.IsBoxAt(board.Dim.Idx(5, 1)) || board.Field.Cell(box).IsGoalBox() {
+		t.Fatal("box was not moved off its original goal and onto the destination")
+	}
+}
+
 func TestMouseBoxSelectionAnimatesPushPlan(t *testing.T) {
 	g := &Game{Board: NewBoard("########\n#@ $  .#\n########"), selectedBox: -1}
 	box := g.Board.Dim.Idx(3, 1)

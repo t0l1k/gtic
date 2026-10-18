@@ -437,7 +437,7 @@ func drawLegendTile(a *gtic.API, x, y int, tile Tile) {
 	case Wall:
 		background = Tile(Wall).Color()
 	case Goal, GoalBox, GoalPlayer:
-		background = Tile(FloorGoal).Color()
+		background = Tile(Floor).Color()
 	}
 	a.Rect(x, y, 8, 8, gtic.NewColor(background))
 	switch tile {
@@ -460,7 +460,7 @@ func (g *Game) drawLevelPreview(a *gtic.API, level string, x, y, maxWidth, maxHe
 		cellX = x + cellX*cellSize
 		cellY = y + cellY*cellSize
 		background := Tile(Floor).Color()
-		if cell.Goal {
+		if cell.IsGoal() {
 			background = Tile(Goal).Color()
 		}
 		if cell.Get() == Wall {
@@ -468,9 +468,9 @@ func (g *Game) drawLevelPreview(a *gtic.API, level string, x, y, maxWidth, maxHe
 		}
 		a.Rect(cellX, cellY, cellSize, cellSize, gtic.NewColor(background))
 		switch {
-		case cell.Player:
+		case cell.IsPlayer(), cell.IsGoalPlayer():
 			a.Circ(cellX+cellSize/2, cellY+cellSize/2, max(1, cellSize/2-1), gtic.NewColor(Tile(Player).Color()))
-		case cell.Box:
+		case cell.IsBox(), cell.IsGoalBox():
 			a.Circ(cellX+cellSize/2, cellY+cellSize/2, max(1, cellSize/2-1), gtic.NewColor(Tile(Box).Color()))
 		}
 	}
