@@ -8,14 +8,6 @@ import (
 	"golang.org/x/image/colornames"
 )
 
-type Align int
-
-const (
-	AlignStart Align = iota
-	AlignCenter
-	AlignEnd
-)
-
 func NewLabel(id ElementID, s string) *Element {
 	l := NewElement(id)
 	txt := l.RegisterProperty("text", s)
@@ -43,7 +35,7 @@ func NewLabel(id ElementID, s string) *Element {
 		r := rect.Get().(image.Rectangle)
 		x, y, w, h := gtic.RectXYWH(r)
 		padX, padY := 0, 0
-		switch vAlign.Get().(Align) {
+		switch vAlign.Get().(AlignType) {
 		case AlignStart:
 			padY = 0
 		case AlignCenter:
@@ -51,7 +43,7 @@ func NewLabel(id ElementID, s string) *Element {
 		case AlignEnd:
 			padY = h - 8*sc
 		}
-		switch hAlign.Get().(Align) {
+		switch hAlign.Get().(AlignType) {
 		case AlignStart:
 			padX = 0
 		case AlignCenter:
@@ -60,7 +52,10 @@ func NewLabel(id ElementID, s string) *Element {
 			padX = w - textWidth
 		}
 
-		a.Rect(x, y, w, h, gtic.NewColor(colBg))
+		_, _, _, bgAlpha := colBg.RGBA()
+		if bgAlpha != 0 {
+			a.Rect(x, y, w, h, gtic.NewColor(colBg))
+		}
 		a.Print(txt.Get().(string), x+padX, y+padY, gtic.NewColor(colFg), false, sc, false)
 	}
 	return l

@@ -67,7 +67,7 @@ func (e *Element) Children() []IElement {
 	copy(children, e.children)
 	return children
 }
-func (e *Element) Add(value IElement) { e.children = append(e.children, value) }
+func (e *Element) Add(value IElement) *Element { e.children = append(e.children, value); return e }
 func (e *Element) ResetChildren() {
 	for _, v := range e.Children() {
 		e.Remove(v)

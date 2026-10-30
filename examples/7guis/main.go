@@ -51,12 +51,12 @@ func NewTemeratureConv(id ui.ElementID, fn react.SlotFn[*ui.Element], sc *ui.Sce
 	})
 
 	cont := ui.NewElement("scene.temperature.converter.container")
-	cont.Property("layout").Set(ui.NewHorizontalBoxLayout(0.05))
+	cont.Property("layout").Set(ui.NewHorizontalBoxLayout(1))
 	cont.Add(tempConvCelsius)
 	cont.Add(ui.NewLabel("scene.temperature.converter.label", "="))
 	cont.Add(tempConvFahrenheit)
 	s := ui.NewElement(id)
-	s.Property("layout").Set(ui.NewVerticalFlexLayout([]float32{0.1, 0.1, 0.8}, 0.05))
+	s.Property("layout").Set(ui.NewVerticalFlexLayout([]float64{0.1, 0.1, 0.8}, 1))
 	s.Add(ui.TopBar("scene.temperature.converter.topbar", TempConv, QuitDemo, fn))
 	s.Add(ui.NewLabel("scene.temperature.converter.helper", "Bidirectional data flow with user-provided text input."))
 	s.Add(cont)
@@ -81,13 +81,13 @@ func NewCounter(id ui.ElementID, fn react.SlotFn[*ui.Element]) *ui.Element {
 	})
 
 	contBtns := ui.NewElement("scene.counter.buttons.container")
-	contBtns.Property("layout").Set(ui.NewHorizontalBoxLayout(0.05))
+	contBtns.Property("layout").Set(ui.NewHorizontalBoxLayout(1))
 	contBtns.Add(btnInc)
 	contBtns.Add(btnDec)
 	contBtns.Add(btnReset)
 
 	s := ui.NewElement(id)
-	s.Property("layout").Set(ui.NewVerticalFlexLayout([]float32{0.1, 0.7, 0.2}, 0.05))
+	s.Property("layout").Set(ui.NewVerticalFlexLayout([]float64{0.1, 0.7, 0.2}, 1))
 	s.Add(ui.TopBar("scene.counter.topbar", Counter, QuitDemo, fn))
 	s.Add(lblCount)
 	s.Add(contBtns)
@@ -96,11 +96,11 @@ func NewCounter(id ui.ElementID, fn react.SlotFn[*ui.Element]) *ui.Element {
 
 func sceneMain(fn react.SlotFn[*ui.Element]) *ui.Element {
 	s := ui.NewElement("scene.main")
-	s.Property("layout").Set(ui.NewVerticalBoxLayout(0.05))
 	s.Add(ui.TopBar("main.scene.topbar", Title, QuitApp, fn))
 	for _, txt := range []string{Counter, TempConv, FlightBooker, Timer, Crud, Circle, Cells} {
 		s.Add(ui.NewButton("scane.main.button", txt, fn))
 	}
+	s.Property("layout").Set(ui.NewVerticalBoxLayout(1))
 	return s
 }
 

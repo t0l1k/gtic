@@ -31,9 +31,9 @@ func (a *API) Pix(x, y int, col ...RGBA) RGBA {
 
 // Line draws a one-pixel-wide line using Bresenham's algorithm.
 func (a *API) Line(x0, y0, x1, y1 int, colour RGBA) {
-	dx := abs(x1 - x0)
+	dx := Abs(x1 - x0)
 	sx := sign(x1 - x0)
-	dy := -abs(y1 - y0)
+	dy := -Abs(y1 - y0)
 	sy := sign(y1 - y0)
 	err := dx + dy
 	for {
